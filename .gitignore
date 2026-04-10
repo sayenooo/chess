@@ -21,6 +21,7 @@ ENV/
 db.sqlite3
 media/
 staticfiles/
+test_comprehensive.py
 
 # IDE / Editor
 .vscode/
