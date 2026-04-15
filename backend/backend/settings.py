@@ -25,12 +25,13 @@ SECRET_KEY = 'django-insecure-@+cuo364rn-6!$mosg*i6(lph=wvv6*j#5a%rj36xjc2jn!2xo
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
 
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -69,7 +70,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'backend.wsgi.application'
-
+ASGI_APPLICATION = 'backend.asgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
@@ -117,3 +118,46 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# ─── Channel Layers ─────────────────────────────────────
+# InMemoryChannelLayer — работает без Redis, для локальной разработки.
+# ⚠️  Не поддерживает несколько процессов, только один сервер!
+# Для production раскомментируй Redis-вариант ниже.
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
+
+# --- Production (Redis) ---
+# CHANNEL_LAYERS = {
+#     "default": {
+#         "BACKEND": "channels_redis.core.RedisChannelLayer",
+#         "CONFIG": {
+#             "hosts": [("127.0.0.1", 6379)],
+#         },
+#     },
+# }
+
+# ─── CORS (для Angular фронтенда) ──────────────────────
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:4200',   # Angular dev server
+    'http://127.0.0.1:4200',
+]
+
+# ─── Logging ────────────────────────────────────────────
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'game': {
+            'handlers': ['console'],
+            'level': 'INFO',
+        },
+    },
+}
