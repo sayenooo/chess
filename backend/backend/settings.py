@@ -38,12 +38,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'corsheaders',
     'rest_framework',
-    'game'
+    'game',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -119,17 +121,12 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
-# ─── Channel Layers ─────────────────────────────────────
-# InMemoryChannelLayer — работает без Redis, для локальной разработки.
-# ⚠️  Не поддерживает несколько процессов, только один сервер!
-# Для production раскомментируй Redis-вариант ниже.
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
 
-# --- Production (Redis) ---
 # CHANNEL_LAYERS = {
 #     "default": {
 #         "BACKEND": "channels_redis.core.RedisChannelLayer",
@@ -139,13 +136,11 @@ CHANNEL_LAYERS = {
 #     },
 # }
 
-# ─── CORS (для Angular фронтенда) ──────────────────────
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:4200',   # Angular dev server
     'http://127.0.0.1:4200',
 ]
 
-# ─── Logging ────────────────────────────────────────────
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

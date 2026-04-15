@@ -2,33 +2,28 @@ from django.db import models
 
 
 class Game(models.Model):
-    """Модель шахматной партии — поддерживает ONLINE / SOLO / BOT."""
-
     class GameType(models.TextChoices):
-        ONLINE = 'ONLINE', 'Онлайн'
-        SOLO = 'SOLO', 'С самим собой'
-        BOT = 'BOT', 'Против бота'
+        ONLINE = 'ONLINE', 'Online'
+        SOLO = 'SOLO', 'Play vs Yourself'
+        BOT = 'BOT', 'Play vs Bot'
 
     class Status(models.TextChoices):
-        WAITING = 'WAITING', 'Ожидание игрока'
-        IN_PROGRESS = 'IN_PROGRESS', 'В процессе'
-        CHECKMATE = 'CHECKMATE', 'Мат'
-        STALEMATE = 'STALEMATE', 'Пат'
-        DRAW = 'DRAW', 'Ничья'
-        RESIGNED = 'RESIGNED', 'Сдача'
+        WAITING = 'WAITING', 'Waiting for Player'
+        IN_PROGRESS = 'IN_PROGRESS', 'In Progress'
+        CHECKMATE = 'CHECKMATE', 'Checkmate'
+        STALEMATE = 'STALEMATE', 'Stalemate'
+        DRAW = 'DRAW', 'Draw'
+        RESIGNED = 'RESIGNED', 'Resigned'
 
-    # --- Тип режима ---
     game_type = models.CharField(
         max_length=10,
         choices=GameType.choices,
         default=GameType.ONLINE,
     )
 
-    # --- Игроки (blank/null для SOLO и BOT) ---
     player_white = models.CharField(max_length=100, blank=True, default='')
     player_black = models.CharField(max_length=100, blank=True, default='')
 
-    # --- Состояние ---
     STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
     current_fen = models.CharField(max_length=100, default=STARTING_FEN)
     status = models.CharField(
@@ -38,7 +33,6 @@ class Game(models.Model):
     )
     winner = models.CharField(max_length=10, blank=True, default='')
 
-    # --- Временные метки ---
     created_at = models.DateTimeField(auto_now_add=True)
     last_move_at = models.DateTimeField(auto_now=True)
 
@@ -47,8 +41,6 @@ class Game(models.Model):
 
 
 class Move(models.Model):
-    """Один ход в партии."""
-
     game = models.ForeignKey(Game, related_name='moves', on_delete=models.CASCADE)
     move_number = models.IntegerField()
     from_square = models.CharField(max_length=2)

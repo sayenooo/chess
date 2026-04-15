@@ -2,11 +2,6 @@ from rest_framework import serializers
 
 from .models import Game, Move
 
-
-# ───────────────────────────────────────────────
-# REST API сериализаторы (для будущего REST API)
-# ───────────────────────────────────────────────
-
 class MoveSerializer(serializers.ModelSerializer):
     class Meta:
         model = Move
@@ -20,33 +15,24 @@ class GameSerializer(serializers.ModelSerializer):
         model = Game
         fields = '__all__'
 
-
-# ───────────────────────────────────────────────
-# WebSocket входные сериализаторы
-# ───────────────────────────────────────────────
-# Это НЕ ModelSerializer: они только валидируют JSON
-# от фронтенда, не привязаны к БД.
-# ───────────────────────────────────────────────
-
 class MoveInputSerializer(serializers.Serializer):
     """
-    Валидация хода, полученного через WebSocket.
-
-    Пример JSON от фронта:
+    Validation
+    Example JSON:
     {
         "action": "move",
         "from_square": "e2",
         "to_square": "e4",
-        "promotion": "Queen"   // необязательно
+        "promotion": "Queen"   // not necessary
     }
     """
     from_square = serializers.RegexField(
         regex=r'^[a-h][1-8]$',
-        help_text='Клетка откуда ходим, формат a1-h8',
+        help_text='Square from which the piece is moved, format a1-h8',
     )
     to_square = serializers.RegexField(
         regex=r'^[a-h][1-8]$',
-        help_text='Клетка куда ходим, формат a1-h8',
+        help_text='Square to which the piece is moved, format a1-h8',
     )
     promotion = serializers.ChoiceField(
         choices=['Queen', 'Rook', 'Bishop', 'Knight'],

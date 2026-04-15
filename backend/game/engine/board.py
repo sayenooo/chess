@@ -1,20 +1,17 @@
 from .pieces import Pawn, Rook, Knight, Bishop, Queen, King
 
-
-# ─── Утилиты для конвертации нотации ───────────────────
-FILES = 'abcdefgh'   # столбцы: a=0, b=1, …, h=7
-
+CHARS = 'abcdefgh'
 
 def parse_square(square: str) -> tuple[int, int]:
-    """'e2' → (1, 4).  Формат: буква (a-h) + цифра (1-8)."""
-    col = FILES.index(square[0])
+    """'e2' → (1, 4)."""
+    col = CHARS.index(square[0])
     row = int(square[1]) - 1
     return row, col
 
 
 def format_square(row: int, col: int) -> str:
     """(1, 4) → 'e2'."""
-    return f'{FILES[col]}{row + 1}'
+    return f'{CHARS[col]}{row + 1}'
 
 
 class Board:
@@ -111,7 +108,7 @@ class Board:
                 captured_piece = self.grid[start_row][end_col]
                 self.grid[start_row][end_col] = None
 
-        # --- Рокировка ---
+        # --- Castling ---
         if isinstance(piece, King) and abs(start_col - end_col) == 2:
             if end_col == 6:
                 rook = self.grid[start_row][7]
@@ -126,7 +123,7 @@ class Board:
                 rook.position = (start_row, 3)
                 rook.has_moved = True
 
-        # --- Превращение пешки ---
+        # --- Pawn promotion ---
         if isinstance(piece, Pawn):
             if (piece.color == 'white' and end_row == 7) or (piece.color == 'black' and end_row == 0):
                 choices = {
@@ -149,9 +146,9 @@ class Board:
 
         return captured_piece
 
-    # ─── Сериализация состояния для WebSocket ──────────
+    # --- Serialization for WebSocket ---
     def to_dict(self) -> dict:
-        """Возвращает полное состояние доски для отправки клиенту."""
+        """Returns the complete state of the board for sending to the client."""
         board_state = []
         for row in range(8):
             for col in range(8):
