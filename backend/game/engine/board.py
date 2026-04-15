@@ -1,10 +1,25 @@
-from pieces import Pawn, Rook, Knight, Bishop, Queen, King
+from .pieces import Pawn, Rook, Knight, Bishop, Queen, King
+
+CHARS = 'abcdefgh'
+
+def parse_square(square: str) -> tuple[int, int]:
+    """'e2' → (1, 4)."""
+    col = CHARS.index(square[0])
+    row = int(square[1]) - 1
+    return row, col
+
+
+def format_square(row: int, col: int) -> str:
+    """(1, 4) → 'e2'."""
+    return f'{CHARS[col]}{row + 1}'
+
 
 class Board:
     def __init__(self):
         self.grid = [[None for _ in range(8)] for _ in range(8)]
         self.current_turn = 'white'
         self.last_move = None
+        self.move_count = 0
         self.setup_starting_position()
 
     def setup_starting_position(self):
@@ -27,19 +42,6 @@ class Board:
         self.grid[row][col] = piece
         piece.position = (row, col)
 
-    def move_piece(self, start_pos, end_pos):
-        start_row, start_col = start_pos
-        end_row, end_col = end_pos
-
-        piece = self.grid[start_row][start_col]
-
-        self.grid[start_row][start_col] = None
-
-        self.grid[end_row][end_col] = piece
-
-        if piece is not None:
-            piece.position = (end_row, end_col)
-            
     def is_under_attack(self, row, col, enemy_color):
         for r in range(8):
             for c in range(8):
@@ -56,7 +58,7 @@ class Board:
                         moves = piece.get_possible_moves(self)
                         if (row, col) in moves:
                             return True
-                            
+
         return False
 
     def is_in_check(self, color):
@@ -75,7 +77,7 @@ class Board:
         if king_pos:
             return self.is_under_attack(king_pos[0], king_pos[1], enemy_color)
         return False
-    
+
     def has_any_valid_moves(self, color):
         for r in range(8):
             for c in range(8):
@@ -99,10 +101,14 @@ class Board:
         if piece is None:
             return
 
+        # --- En passant ---
+        captured_piece = self.grid[end_row][end_col]
         if isinstance(piece, Pawn) and start_col != end_col:
             if self.grid[end_row][end_col] is None:
+                captured_piece = self.grid[start_row][end_col]
                 self.grid[start_row][end_col] = None
 
+        # --- Castling ---
         if isinstance(piece, King) and abs(start_col - end_col) == 2:
             if end_col == 6:
                 rook = self.grid[start_row][7]
@@ -117,13 +123,14 @@ class Board:
                 rook.position = (start_row, 3)
                 rook.has_moved = True
 
+        # --- Pawn promotion ---
         if isinstance(piece, Pawn):
             if (piece.color == 'white' and end_row == 7) or (piece.color == 'black' and end_row == 0):
                 choices = {
                     'Queen': Queen,
                     'Rook': Rook,
                     'Bishop': Bishop,
-                    'Knight': Knight
+                    'Knight': Knight,
                 }
                 new_piece_class = choices.get(promotion_choice, Queen)
                 piece = new_piece_class(piece.color, (end_row, end_col))
@@ -134,4 +141,28 @@ class Board:
         piece.position = (end_row, end_col)
         piece.has_moved = True
         self.last_move = (piece, start_pos, end_pos)
+        self.move_count += 1
         self.current_turn = 'black' if self.current_turn == 'white' else 'white'
+
+        return captured_piece
+
+    # --- Serialization for WebSocket ---
+    def to_dict(self) -> dict:
+        """Returns the complete state of the board for sending to the client."""
+        board_state = []
+        for row in range(8):
+            for col in range(8):
+                piece = self.get_piece_at(row, col)
+                if piece:
+                    board_state.append({
+                        'square': format_square(row, col),
+                        'type': piece.__class__.__name__,
+                        'color': piece.color,
+                    })
+
+        return {
+            'board': board_state,
+            'current_turn': self.current_turn,
+            'move_count': self.move_count,
+            'is_check': self.is_in_check(self.current_turn),
+        }
