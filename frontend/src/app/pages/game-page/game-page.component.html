@@ -1,0 +1,34 @@
+<div class="page">
+  <div class="topbar">
+    <div class="info">
+      <h1>Chess Game</h1>
+      <p>Current turn: <strong>{{ currentTurn || '—' }}</strong></p>
+      @if (selectedFrom) {
+        <p>Selected: <strong>{{ selectedFrom }}</strong></p>
+      }
+
+      @if (errorMessage) {
+        <p class="error">{{ errorMessage }}</p>
+      }
+    </div>
+  </div>
+
+  <div class="board-wrapper">
+    <div class="board">
+      @for (square of getSquares(); track trackBySquare($index, square)) {
+        <button
+          type="button"
+          class="square"
+          [attr.data-square]="square"
+          [class.dark]="isDarkSquare(square)"
+          [class.light]="!isDarkSquare(square)"
+          [class.selected]="isSelected(square)"
+          (click)="onSquareClick(square)"
+        >
+          <span class="coordinate">{{ square }}</span>
+          <span class="piece">{{ getPieceSymbol(square) }}</span>
+        </button>
+      }
+    </div>
+  </div>
+</div>

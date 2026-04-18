@@ -1,0 +1,94 @@
+:root {
+  --cell-size: 96px; /* ← меняй это значение */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+.page {
+  min-height: 100vh;
+  background: #1e1e1e;
+  color: white;
+}
+
+.content {
+  padding: 24px;
+}
+
+.topbar {
+  margin-bottom: 20px;
+}
+
+.info {
+  position: fixed;
+  margin-left: 100px;
+  font-size: 30px;
+}
+
+.error {
+  color: #ff6b6b;
+  font-weight: bold;
+}
+
+.board-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(8, 94px);
+  grid-template-rows: repeat(8, 94px);
+  border: 4px solid #333;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.square {
+  position: relative;
+  width: 94px;
+  height: 94px;
+  border: none;
+  cursor: pointer;
+  font-size: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.square.light {
+  background: #f0d9b5;
+}
+
+.square.dark {
+  background: #b58863;
+}
+
+.square.selected {
+  outline: 4px solid #4da3ff;
+  z-index: 1;
+}
+
+.square:hover {
+  filter: brightness(1.05);
+}
+
+.coordinate {
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.piece {
+  line-height: 1;
+}
