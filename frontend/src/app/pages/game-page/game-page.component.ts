@@ -28,10 +28,12 @@ export class GamePageComponent implements OnInit, OnDestroy {
   private ngZone = inject(NgZone);
   private cdr = inject(ChangeDetectorRef);
   private sub?: Subscription;
+  private clickBoardAfterNewGame = false;
 
   board: Piece[] = [];
   currentTurn = '';
   errorMessage = '';
+  boardFlipped = false;
 
   selectedFrom: string | null = null;
   selectedTo: string | null = null;
@@ -42,27 +44,33 @@ export class GamePageComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.sub = this.gameService.connect('solo1', 'solo').subscribe({
       next: (message) => {
-      this.ngZone.run(() => {
+        this.ngZone.run(() => {
           if (message.type === 'game_state') {
             this.applyBoardState(message.payload);
             this.errorMessage = '';
+            this.clearSelection();
+
+            if (this.clickBoardAfterNewGame) {
+              this.clickBoardAfterNewGame = false;
+              this.boardFlipped = false;
+              this.cdr.detectChanges();
+              this.clickSquareAfterRender('a8');
+            } else {
+              this.cdr.detectChanges();
+            }
+
+            return;
           }
         
           if (message.type === 'move_result') {
             this.applyBoardState(message.payload.board);
             this.errorMessage = '';
             this.clearSelection();
+            this.switchBoardSideAfterMove();
+            this.cdr.detectChanges();
                     
             const toSquare = message.payload.to_square;
-            if (toSquare) {
-              setTimeout(() => {
-                const btn = document.querySelector(
-                  `[data-square="${toSquare}"]`
-                ) as HTMLButtonElement | null;
-              
-                btn?.click();
-              }, 0);
-            }
+            this.clickSquareAfterRender(toSquare);
           
             return;
           }
@@ -85,11 +93,25 @@ export class GamePageComponent implements OnInit, OnDestroy {
     this.currentTurn = state?.current_turn ?? this.currentTurn;
   }
 
+  private clickSquareAfterRender(square: string | null | undefined): void {
+    if (!square) return;
+
+    setTimeout(() => {
+      const btn = document.querySelector(
+        `[data-square="${square}"]`
+      ) as HTMLButtonElement | null;
+
+      btn?.click();
+    }, 0);
+  }
+
   getSquares(): string[] {
     const squares: string[] = [];
+    const files = this.boardFlipped ? [...this.files].reverse() : this.files;
+    const ranks = this.boardFlipped ? [...this.ranks].reverse() : this.ranks;
 
-    for (const rank of this.ranks) {
-      for (const file of this.files) {
+    for (const rank of ranks) {
+      for (const file of files) {
         squares.push(`${file}${rank}`);
       }
     }
@@ -180,5 +202,64 @@ export class GamePageComponent implements OnInit, OnDestroy {
   private isPieceSelectable(piece: Piece | undefined): boolean {
     if (!piece) return false;
     return piece.color === this.currentTurn;
+  }
+
+  // chess right side settings
+  gameMode: 'bot' | 'pvp' = 'bot';
+  botDifficulty: 'easy' | 'medium' | 'hard' = 'medium';
+  playerSide: 'white' | 'black' = 'white';
+  switchSidesAfterMove = true;
+
+  moves: string[] = [];
+
+  selectGameMode(mode: 'bot' | 'pvp'): void {
+    this.gameMode = mode;
+  }
+
+  selectDifficulty(level: 'easy' | 'medium' | 'hard'): void {
+    this.botDifficulty = level;
+  }
+
+  selectSide(side: 'white' | 'black'): void {
+    this.playerSide = side;
+  }
+
+  setSwitchSides(value: boolean): void {
+    this.switchSidesAfterMove = value;
+  }
+
+  switchBoardSideAfterMove(): void {
+    if (!this.switchSidesAfterMove) return;
+
+    this.boardFlipped = !this.boardFlipped;
+  }
+
+  startGame(): void {
+    console.log('Start game');
+  }
+
+  // move history
+  // moves: string[] = [];
+  // if (message.type === 'move_result') {
+  //   const move = message.payload;
+    
+  //   const moveText = `${move.from_square} ${move.to_square}`;
+    
+  //   this.moves.push(moveText);
+  // }
+  // const moveText = `${move.from_square.toUpperCase()} → ${move.to_square.toUpperCase()}`;
+  // let moveText = `${move.from_square.toUpperCase()} → ${move.to_square.toUpperCase()}`;
+
+  // if (move.captured) {
+  //   moveText += ' (x)';
+  //}
+
+  newGame(): void {
+    this.clickBoardAfterNewGame = true;
+    this.gameService.newGame();
+  }
+  
+  resign(): void {
+    this.gameService.resign();
   }
 }
