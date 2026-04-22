@@ -145,24 +145,77 @@ class Board:
         self.current_turn = 'black' if self.current_turn == 'white' else 'white'
 
         return captured_piece
-
-    # --- Serialization for WebSocket ---
-    def to_dict(self) -> dict:
-        """Returns the complete state of the board for sending to the client."""
-        board_state = []
+    
+    def get_fen(self) -> str:
+        fen_rows = []
+        for row in range(7, -1, -1):
+            empty_count = 0
+            row_fen = ""
+            for col in range(8):
+                piece = self.grid[row][col]
+                if piece is None:
+                    empty_count += 1
+                else:
+                    if empty_count > 0:
+                        row_fen += str(empty_count)
+                        empty_count = 0
+                    
+                    p_name = piece.__class__.__name__
+                    if p_name == 'Knight': char = 'N'
+                    elif p_name == 'Bishop': char = 'B'
+                    elif p_name == 'Rook': char = 'R'
+                    elif p_name == 'Queen': char = 'Q'
+                    elif p_name == 'King': char = 'K'
+                    else: char = 'P'
+                    
+                    if piece.color == 'black':
+                        char = char.lower()
+                        
+                    row_fen += char
+            
+            if empty_count > 0:
+                row_fen += str(empty_count)
+            fen_rows.append(row_fen)
+            
+        piece_placement = "/".join(fen_rows)
+        active_color = 'w' if self.current_turn == 'white' else 'b'
+        
+        castling = ""
+        wk = self.grid[0][4]
+        if wk and wk.__class__.__name__ == 'King' and wk.color == 'white' and not wk.has_moved:
+            rr = self.grid[0][7]
+            if rr and rr.__class__.__name__ == 'Rook' and rr.color == 'white' and not rr.has_moved:
+                castling += 'K'
+            lr = self.grid[0][0]
+            if lr and lr.__class__.__name__ == 'Rook' and lr.color == 'white' and not lr.has_moved:
+                castling += 'Q'
+        bk = self.grid[7][4]
+        if bk and bk.__class__.__name__ == 'King' and bk.color == 'black' and not bk.has_moved:
+            rr = self.grid[7][7]
+            if rr and rr.__class__.__name__ == 'Rook' and rr.color == 'black' and not rr.has_moved:
+                castling += 'k'
+            lr = self.grid[7][0]
+            if lr and lr.__class__.__name__ == 'Rook' and lr.color == 'black' and not lr.has_moved:
+                castling += 'q'
+                
+        if not castling:
+            castling = "-"
+            
+        en_passant = "-"
+        halfmove = "0"
+        fullmove = str((self.move_count // 2) + 1)
+        
+        return f"{piece_placement} {active_color} {castling} {en_passant} {halfmove} {fullmove}"
+    
+    def get_all_legal_moves(self) -> dict:
+        """Returns dict { 'e2': ['e3', 'e4'], 'g1': ['f3', 'h3'] ... }"""
+        all_moves = {}
         for row in range(8):
             for col in range(8):
-                piece = self.get_piece_at(row, col)
-                if piece:
-                    board_state.append({
-                        'square': format_square(row, col),
-                        'type': piece.__class__.__name__,
-                        'color': piece.color,
-                    })
-
-        return {
-            'board': board_state,
-            'current_turn': self.current_turn,
-            'move_count': self.move_count,
-            'is_check': self.is_in_check(self.current_turn),
-        }
+                piece = self.grid[row][col]
+                if piece and piece.color == self.current_turn:
+                    pos = format_square(row, col)
+                    moves = piece.get_legal_moves(self)
+                    if moves:
+                        all_moves[pos] = [format_square(r, c) for r, c in moves]
+        return all_moves

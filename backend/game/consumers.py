@@ -1,9 +1,9 @@
 import logging
 from typing import ClassVar
 from urllib.parse import parse_qs
-
+from .bot import ChessBot
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-
+from channels.db import database_sync_to_async
 from game.engine.board import Board, parse_square, format_square
 from game.models import Game, Move
 from game.serializers import MoveInputSerializer
@@ -32,42 +32,60 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
     active_boards: ClassVar[dict[str, Board]] = {}
 
     async def connect(self):
+        self.user = self.scope['user']
+        
+        if self.user.is_anonymous:
+            await self.close()
+            return
+
         self.room_name: str = self.scope['url_route']['kwargs']['room_name']
         self.room_group_name = f'game_{self.room_name}'
 
-        # Determine game type from query string: ?type=solo|online|bot
-        query_string = self.scope.get('query_string', b'').decode('utf-8')
-        params = parse_qs(query_string)
-        type_param = params.get('type', ['online'])[0].upper()
-        self.game_type = type_param if type_param in ('SOLO', 'ONLINE', 'BOT') else 'ONLINE'
-        self.is_solo = self.game_type == 'SOLO'
+        game = await self.get_game()
+        if not game:
+            await self.close()
+            return
 
-        # Create a new board for this room if it doesn't exist yet
+        self.game_type = game.game_type
+
+        if self.game_type == 'ONLINE':
+            if game.player_white and game.player_white.user == self.user:
+                self.user_color = 'white'
+            elif game.player_black and game.player_black.user == self.user:
+                self.user_color = 'black'
+            else:
+                await self.close()
+                return
+            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+
+        elif self.game_type == 'SOLO':
+            if game.player_white and game.player_white.user == self.user:
+                self.user_color = 'both'
+            else:
+                await self.close()
+                return
+            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+
+        elif self.game_type == 'BOT':
+            if game.player_white and game.player_white.user == self.user:
+                self.user_color = 'white'
+            elif game.player_black and game.player_black.user == self.user:
+                self.user_color = 'black'
+            else:
+                await self.close()
+                return
+            await self.channel_layer.group_add(self.room_group_name, self.channel_name)
+
         if self.room_name not in self.active_boards:
             self.active_boards[self.room_name] = Board()
-
         self.board = self.active_boards[self.room_name]
 
-        # For online mode — join the channel group for broadcasting
-        if not self.is_solo:
-            await self.channel_layer.group_add(
-                self.room_group_name,
-                self.channel_name,
-            )
-
         await self.accept()
-
-        logger.info(
-            'Player connected to room %s (type=%s)',
-            self.room_group_name,
-            self.game_type,
-        )
-
-        # Send initial game state
+        
         await self.send_json({
-            'type': 'game_state',
-            'game_type': self.game_type,
-            'payload': self.board.to_dict(),
+            'type': 'connection_established',
+            'color': self.user_color,
+            'game_type': self.game_type
         })
 
     async def disconnect(self, close_code):
@@ -105,10 +123,15 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             case 'new_game':
                 await self._handle_new_game()
             case 'get_state':
+                game = await self.get_game()
                 await self.send_json({
                     'type': 'game_state',
                     'game_type': self.game_type,
-                    'payload': self.board.to_dict(),
+                    'payload': {
+                        'fen': game.current_fen,
+                        'current_turn': self.board.current_turn,
+                        'status': game.status,
+                    },
                 })
             case _:
                 await self.send_json({
@@ -118,9 +141,40 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                         'valid_actions': ['move', 'resign', 'get_state', 'new_game'],
                     },
                 })
+    
+    @database_sync_to_async
+    def get_game(self):
+        try:
+            # Looking for the game by ID and get users
+            return Game.objects.select_related(
+                'player_white__user',
+                'player_black__user'
+            ).get(id=self.room_name)
+        except (Game.DoesNotExist, ValueError):
+            return None
 
-    async def _handle_move(self, content: dict):
-        # 1. Validate input data using MoveInputSerializer
+    async def _handle_move(self, content: dict, is_bot=False):
+        # Game status check
+        game = await self.get_game()
+        if game.status in [Game.Status.CHECKMATE, Game.Status.STALEMATE, Game.Status.DRAW, Game.Status.RESIGNED]:
+            if not is_bot:
+                await self.send_json({
+                    'type': 'error',
+                    'payload': {'message': 'The game is already over, you can\'t make any moves!'}
+                })
+            return
+
+        current_turn = self.board.current_turn
+        
+        if not is_bot and self.user_color != 'both' and self.user_color != current_turn:
+            await self.send_json({
+                'type': 'error',
+                'payload': {
+                    'message': f'It\'s not your turn right now! You\'re playing for {self.user_color}, but now it is {current_turn}\'s turn.'
+                }
+            })
+            return
+
         serializer = MoveInputSerializer(data=content)
         if not serializer.is_valid():
             await self.send_json({
@@ -132,149 +186,189 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             })
             return
 
-        data = serializer.validated_data
-        from_sq = data['from_square']
-        to_sq = data['to_square']
-        promotion = data.get('promotion', 'Queen')
+        from_sq = serializer.validated_data['from_square']
+        to_sq = serializer.validated_data['to_square']
+        promotion = serializer.validated_data.get('promotion', 'Queen')
 
-        # 2. Parse square notation
-        start_row, start_col = parse_square(from_sq)
-        end_row, end_col = parse_square(to_sq)
+        try:
+            from_row, from_col = parse_square(from_sq)
+            to_row, to_col = parse_square(to_sq)
 
-        # 3. Check if there is a piece on the from_square and if it belongs to the current player
-        piece = self.board.get_piece_at(start_row, start_col)
-        if piece is None:
-            await self.send_json({
-                'type': 'error',
-                'payload': {'message': f'There is no piece on {from_sq}'},
-            })
-            return
+            piece = self.board.get_piece_at(from_row, from_col)
+            if not piece:
+                await self.send_json({
+                    'type': 'error', 
+                    'payload': {
+                        'message': 'No piece at from_square'
+                        },
+                })
+                return
 
-        if piece.color != self.board.current_turn:
-            await self.send_json({
-                'type': 'error',
-                'payload': {'message': f'Currently it is {self.board.current_turn}\'s turn, but the piece on {from_sq} is {piece.color}'},
-            })
-            return
+            legal_moves = piece.get_legal_moves(self.board)
+            if (to_row, to_col) not in legal_moves:
+                await self.send_json({
+                    'type': 'error', 
+                    'payload': {
+                        'message': 'Illegal move'
+                        }
+                })
+                return
 
-        # 4. Check if the move is legal for this piece
-        legal_moves = piece.get_legal_moves(self.board)
-        if (end_row, end_col) not in legal_moves:
-            await self.send_json({
-                'type': 'error',
-                'payload': {
-                    'message': f'Illegal move: {from_sq} → {to_sq}',
-                    'legal_moves': [format_square(r, c) for r, c in legal_moves],
-                },
-            })
-            return
+            piece_name = piece.__class__.__name__
+            captured_piece = self.board.move_piece((from_row, from_col), (to_row, to_col), promotion)
+            captured_name = captured_piece.__class__.__name__ if captured_piece else ''
+            new_fen = self.board.get_fen()
+            game.current_fen = new_fen
+            await game.asave()
+            is_check = self.board.is_in_check(self.board.current_turn)
+            is_checkmate = self.board.is_checkmate(self.board.current_turn)
+            is_stalemate = self.board.is_stalemate(self.board.current_turn)
 
-        # 5. Make the move on the board
-        piece_name = piece.__class__.__name__
-        captured = self.board.move_piece(
-            (start_row, start_col),
-            (end_row, end_col),
-            promotion_choice=promotion,
-        )
-
-        # 6. Check / Checkmate / Stalemate
-        opponent = self.board.current_turn
-        is_check = self.board.is_in_check(opponent)
-        is_checkmate = self.board.is_checkmate(opponent)
-        is_stalemate = self.board.is_stalemate(opponent)
-
-        status = 'in_progress'
-        if is_checkmate:
-            status = 'checkmate'
-        elif is_stalemate:
-            status = 'stalemate'
-        elif is_check:
-            status = 'check'
-
-        # 7. Format move result
-        move_result = {
-            'from_square': from_sq,
-            'to_square': to_sq,
-            'piece': piece_name,
-            'captured': captured.__class__.__name__ if captured else None,
-            'promotion': promotion if piece_name == 'Pawn' and (end_row == 0 or end_row == 7) else None,
-            'is_check': is_check,
-            'is_checkmate': is_checkmate,
-            'is_stalemate': is_stalemate,
-            'status': status,
-            'board': self.board.to_dict(),
-        }
-
-        # 8. Send result — solo sends directly, online broadcasts to group
-        if self.is_solo:
-            await self.send_json({
-                'type': 'move_result',
-                'payload': move_result,
-            })
-        else:
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    'type': 'game.move',
-                    'payload': move_result,
-                },
+                    'type': 'game_move',
+                    'payload': {
+                        'from_square': from_sq,
+                        'to_square': to_sq,
+                        'promotion': promotion,
+                        'is_check': is_check,
+                        'is_checkmate': is_checkmate,
+                        'is_stalemate': is_stalemate,
+                        'current_turn': self.board.current_turn,
+                        'fen': new_fen,
+                        'legal_moves': legal_moves
+                    }
+                }
             )
 
-        # 9. Save move to DB
-        await self._save_move_to_db(
-            from_sq=from_sq,
-            to_sq=to_sq,
-            piece_name=piece_name,
-            captured_name=captured.__class__.__name__ if captured else '',
-            promotion=promotion if piece_name == 'Pawn' and (end_row == 0 or end_row == 7) else '',
-            is_check=is_check,
-            is_checkmate=is_checkmate,
-            is_stalemate=is_stalemate,
-        )
+            await Move.objects.acreate(
+                game=game,
+                move_number=self.board.move_count,
+                from_square=from_sq,
+                to_square=to_sq,
+                piece_moved=piece_name,
+                piece_captured=captured_name,
+                promotion=promotion,
+                is_check=is_check,
+                is_checkmate=is_checkmate,
+                is_stalemate=is_stalemate,
+                fen_after_move=new_fen,
+            )
+
+            if is_checkmate:
+                game.status = Game.Status.CHECKMATE
+                winner_color = 'white' if self.board.current_turn == 'black' else 'black'
+                game.winner = game.player_white if winner_color == 'white' else game.player_black
+                await game.asave()
+                
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'game_over',
+                        'payload': {
+                            'reason': 'checkmate', 
+                            'winner': winner_color
+                            }
+                    }
+                )
+            elif is_stalemate:
+                game.status = Game.Status.STALEMATE
+                await game.asave()
+                
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'game_over',
+                        'payload': {
+                            'reason': 'stalemate'
+                            }
+                    }
+                )
+
+        except Exception:
+            logger.exception('Error processing move')
+
+        if self.game_type == 'BOT' and game.status == Game.Status.IN_PROGRESS and not is_bot:
+            await self._trigger_bot_move(game)
 
     async def _handle_resign(self):
-        payload = {
-            'reason': 'resign',
-            'message': 'Player has resigned. Game over.',
-        }
+        game = await self.get_game()
+        
+        if game.status != Game.Status.IN_PROGRESS and game.status != Game.Status.WAITING:
+            return
 
-        if self.is_solo:
-            await self.send_json({
-                'type': 'game_over',
-                'payload': payload,
-            })
+        if self.user_color == 'both':
+            winner_color = 'black' if self.board.current_turn == 'white' else 'white'
         else:
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'game.over',
-                    'payload': payload,
-                },
-            )
+            winner_color = 'black' if self.user_color == 'white' else 'white'
+
+        game.status = Game.Status.RESIGNED
+        if winner_color == 'white':
+            game.winner = game.player_white
+        else:
+            game.winner = game.player_black
+            
+        await game.asave()
+
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'game_over',
+                'payload': {
+                    'reason': 'resign',
+                    'winner': winner_color,
+                    'resigned_by': self.user_color
+                }
+            }
+        )
 
     async def _handle_new_game(self):
         """Reset the board and start a new game in the same room."""
         self.active_boards[self.room_name] = Board()
         self.board = self.active_boards[self.room_name]
 
+        new_fen = self.board.get_fen()
+        game = await self.get_game()
+        if game:
+            game.current_fen = new_fen
+            game.status = Game.Status.IN_PROGRESS
+            game.winner = None
+            await game.asave()
+            
         payload = {
             'type': 'game_state',
             'game_type': self.game_type,
-            'payload': self.board.to_dict(),
+            'payload': {
+                'fen': new_fen,
+                'current_turn': self.board.current_turn,
+                'status': Game.Status.IN_PROGRESS,
+            },
         }
 
-        if self.is_solo:
+        if self.game_type == 'SOLO':
             await self.send_json(payload)
         else:
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    'type': 'game.new_game',
+                    'type': 'game_message',
                     'payload': payload,
                 },
             )
 
         logger.info('New game started in room %s', self.room_name)
+
+    async def _trigger_bot_move(self, game):
+        bot_action = await self.get_bot_move_async(game.bot_level, game.current_fen)
+        
+        if bot_action:
+            await self._handle_move(bot_action, is_bot=True)
+
+    @database_sync_to_async
+    def get_bot_move_async(self, level, move_history):
+        bot = ChessBot(level=level)
+        return bot.get_best_move(move_history)
 
     async def _save_move_to_db(
         self,

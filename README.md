@@ -1,361 +1,236 @@
 # ♟ Chess Project
 
-Шахматный онлайн/оффлайн проект на **Django 6** (backend) + **Angular 21** (frontend).
+A full-stack offline and online chess platform built with **Django 6** (backend) and **Angular 21** (frontend).
 
 ---
 
-## Стек технологий
+## 🛠 Tech Stack
 
-| Компонент | Технологии |
+| Component | Technologies |
 |-----------|-----------|
-| Backend | Django 6, Django REST Framework, Django Channels, Daphne |
-| Frontend | Angular 21 |
-| WebSocket | Channels + InMemoryChannelLayer (dev) / Redis (prod) |
-| База данных | SQLite (dev) / PostgreSQL (prod) |
+| **Backend** | Django 6, Django REST Framework, Django Channels, Daphne |
+| **Frontend** | Angular 21, RxJS |
+| **WebSocket** | Channels + InMemoryChannelLayer (dev) / Redis (prod) |
+| **Database** | SQLite (dev) / PostgreSQL (prod) |
 
 ---
 
-## 🚀 Запуск проекта
+## 🚀 How to Run the Project
 
 ### Backend (Django)
 
 ```bash
 cd backend
 
-# 1. Активировать виртуальное окружение
+# 1. Create and activate a virtual environment
+python -m venv venv
 .\venv\Scripts\activate          # Windows
 # source venv/bin/activate       # macOS / Linux
 
-# 2. Установить зависимости (если еще не установлены)
+# 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Применить миграции базы данных
+# 3. Apply database migrations
 python manage.py migrate
 
-# 4. (Опционально) Создать суперпользователя для админ-панели
+# 4. (Optional) Create a superuser for the admin panel
 python manage.py createsuperuser
 
-# 5. Запустить сервер
+# 5. Run the server
 python manage.py runserver
 ```
 
-Сервер запустится на **http://127.0.0.1:8000**.  
-Daphne уже настроен, поэтому `runserver` поднимает и HTTP, и WebSocket одновременно.
+The server will start at **http://127.0.0.1:8000**.
+Daphne is already configured as the ASGI application, so `runserver` starts both HTTP and WebSocket servers simultaneously.
 
 ### Frontend (Angular)
 
 ```bash
 cd frontend
 
-npm install   # первый раз
-npm start     # → http://localhost:4200
+# 1. Install dependencies (first time only)
+npm install
+
+# 2. Start the development server
+npm start
 ```
+The frontend will be available at **http://localhost:4200**.
 
 ---
 
-## 🌐 API Endpoints (REST)
+## 🌐 REST API Endpoints
 
-Базовый URL: `http://127.0.0.1:8000/api/`
+The base URL for the API is `http://127.0.0.1:8000/api/`
 
-### Игры
+**Authentication uses JWT (JSON Web Tokens). Requests requiring authentication must include the `Authorization: Bearer <token>` header.**
 
-| Метод | URL | Описание |
-|-------|-----|----------|
-| `GET` | `/api/games/` | Список всех игр |
-| `GET` | `/api/games/?status=IN_PROGRESS` | Фильтр по статусу |
-| `GET` | `/api/games/?type=SOLO` | Фильтр по типу |
-| `GET` | `/api/games/{id}/` | Детали конкретной игры |
-| `GET` | `/api/games/{id}/moves/` | История ходов партии |
-| `POST` | `/api/games/` | Создать новую игру |
+### Authentication & Users
+| Method | URL | Description | Accepted JSON | Returned JSON |
+|---|---|---|---|---|
+| `POST` | `/api/register/` | Register a new user | `{"username": "...", "email": "...", "password": "..."}` | `{"username": "...", "email": "..."}` |
+| `POST` | `/api/login/` | Get JWT tokens | `{"username": "...", "password": "..."}` | `{"access": "...", "refresh": "..."}` |
+| `POST` | `/api/token/refresh/` | Refresh access token | `{"refresh": "..."}` | `{"access": "..."}` |
+| `GET` | `/api/profile/` | Get current user profile | *none* | `{"id": 1, "username": "...", "email": "...", ...}` |
 
-### Ходы
+### Matchmaking (Requires Auth)
+| Method | URL | Description | Accepted JSON | Returned JSON |
+|---|---|---|---|---|
+| `POST` | `/api/matchmaking/join/` | Join queue or find game | *none* | `{"status": "game_found", "game_id": 1}` OR `{"status": "searching"}` |
+| `DELETE`| `/api/matchmaking/leave/` | Leave the matchmaking queue | *none* | *204 No Content* |
 
-| Метод | URL | Описание |
-|-------|-----|----------|
-| `GET` | `/api/moves/` | Все ходы (все игры) |
-| `GET` | `/api/moves/{id}/` | Конкретный ход |
+### Games (Requires Auth)
+| Method | URL | Description | Accepted JSON | Returned JSON |
+|---|---|---|---|---|
+| `GET` | `/api/games/` | List all games (Query params: `?status=IN_PROGRESS` or `?type=SOLO`) | *none* | `[{"id": 1, "game_type": "...", "status": "...", ...}]` |
+| `GET` | `/api/games/{id}/` | Details of a specific game | *none* | `{"id": 1, "current_fen": "...", "moves": [...], ...}` |
+| `POST` | `/api/games/` | Create a new game | `{"game_type": "SOLO|BOT", "bot_level": 1, "side": "white|black|random"}` | Game object details |
+| `GET` | `/api/games/{id}/moves/` | Get all moves of a specific game | *none* | `[{"move_number": 1, "from_square": "e2", ...}]` |
 
-### Админ-панель
-
-| URL | Описание |
-|-----|----------|
-| `/admin/` | Django Admin (управление Game / Move) |
+### Moves (Read-Only)
+| Method | URL | Description |
+|---|---|---|
+| `GET` | `/api/moves/` | All recorded moves |
+| `GET` | `/api/moves/{id}/` | Single move details |
 
 ---
 
 ## 🔌 WebSocket API
 
-### Подключение
+Real-time interactions are handled over WebSockets for game moves, states, and chat features.
 
+### Connection
 ```
-ws://127.0.0.1:8000/ws/game/<room_name>/?type=<тип>
+ws://127.0.0.1:8000/ws/game/<room_name>/
+```
+*(Optionally include query parameters if added in the future, e.g., `?type=solo` is handled internally by checking the game ID).*
+
+**Room Logic:** The `<room_name>` should correspond to the `ID` of the `Game` generated via REST API (`/api/games/` or `/api/matchmaking/join/`).
+
+### Server to Client (What the Frontend receives)
+
+**1. Connection Established**
+Triggered right after successful connection:
+```json
+{
+  "type": "connection_established",
+  "color": "white",         // Can be "white", "black", or "both" (for SOLO)
+  "game_type": "ONLINE"     // "SOLO", "ONLINE", or "BOT"
+}
 ```
 
-| Параметр | Значения | Описание |
-|----------|----------|----------|
-| `room_name` | любая строка | Уникальный ID комнаты (напр. `solo-1`, `room-42`) |
-| `type` | `solo`, `online`, `bot` | Тип игры (по умолчанию `online`) |
-
-**Примеры URL:**
-- Solo:   `ws://127.0.0.1:8000/ws/game/my-solo-game/?type=solo`
-- Online: `ws://127.0.0.1:8000/ws/game/room-42/?type=online`
-
-### При подключении клиент получает
-
+**2. Game State**
+Triggered when requesting state or initializing a new game:
 ```json
 {
   "type": "game_state",
   "game_type": "SOLO",
   "payload": {
-    "board": [
-      {"square": "a1", "type": "Rook", "color": "white"},
-      {"square": "b1", "type": "Knight", "color": "white"},
-      ...
-    ],
+    "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
     "current_turn": "white",
-    "move_count": 0,
-    "is_check": false
+    "status": "IN_PROGRESS"
   }
 }
 ```
 
-### Отправка хода (клиент → сервер)
-
-```json
-{
-  "action": "move",
-  "from_square": "e2",
-  "to_square": "e4"
-}
-```
-
-С превращением пешки:
-```json
-{
-  "action": "move",
-  "from_square": "e7",
-  "to_square": "e8",
-  "promotion": "Queen"
-}
-```
-
-### Ответ на ход (сервер → клиент)
-
+**3. Move Result**
+Triggered whenever a valid move is made by either player (or bot):
 ```json
 {
   "type": "move_result",
   "payload": {
     "from_square": "e2",
     "to_square": "e4",
-    "piece": "Pawn",
-    "captured": null,
-    "promotion": null,
+    "promotion": "Queen",
     "is_check": false,
     "is_checkmate": false,
     "is_stalemate": false,
-    "status": "in_progress",
-    "board": { "...обновлённое состояние доски..." }
+    "current_turn": "black",
+    "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+    "legal_moves": [ ["e7", "e5"], ["d7", "d5"] ] // Internal row/col pairs or strings
   }
 }
 ```
 
-### Другие действия
+**4. Game Over**
+Triggered when checkmate, stalemate, or resign occurs:
+```json
+{
+  "type": "game_over",
+  "payload": {
+    "reason": "checkmate",  // or "stalemate", "resign"
+    "winner": "white",
+    "resigned_by": "black"  // strictly on resign
+  }
+}
+```
 
-| Action | Описание | Пример |
-|--------|----------|--------|
-| `get_state` | Получить текущее состояние | `{"action": "get_state"}` |
-| `resign` | Сдаться | `{"action": "resign"}` |
-| `new_game` | Начать новую партию | `{"action": "new_game"}` |
-
-### Ошибки
-
+**5. Error**
 ```json
 {
   "type": "error",
   "payload": {
-    "message": "Illegal move: e2 → e5",
-    "legal_moves": ["e3", "e4"]
+    "message": "Illegal move",
+    "details": {}
   }
+}
+```
+
+### Client to Server (What the Frontend sends)
+
+**1. Make a Move**
+```json
+{
+  "action": "move",
+  "from_square": "e2",
+  "to_square": "e4",
+  "promotion": "Queen" // Optional, default is Queen
+}
+```
+
+**2. Resign**
+```json
+{
+  "action": "resign"
+}
+```
+
+**3. Request New Game (Restarts board within same room)**
+```json
+{
+  "action": "new_game"
+}
+```
+
+**4. Request State**
+```json
+{
+  "action": "get_state"
 }
 ```
 
 ---
 
-## 📬 Тестирование в Postman
+## 🤝 How Backend and Frontend Communicate (General Workflow)
 
-### REST API
-
-1. Открой Postman
-2. `GET http://127.0.0.1:8000/api/games/` → список игр
-3. `POST http://127.0.0.1:8000/api/games/`  
-   Body (JSON): `{"game_type": "SOLO"}`  
-   → создаст новую игру и вернёт её данные
-
-### WebSocket
-
-Postman поддерживает WebSocket:
-1. **New** → **WebSocket**
-2. URL: `ws://127.0.0.1:8000/ws/game/test-solo/?type=solo`
-3. Нажми **Connect**
-4. Получишь начальное состояние доски
-5. Отправь ход:
-   ```json
-   {"action": "move", "from_square": "e2", "to_square": "e4"}
-   ```
-6. Получишь `move_result` с обновлённой доской
-7. Отправь ход чёрных:
-   ```json
-   {"action": "move", "from_square": "e7", "to_square": "e5"}
-   ```
+1. **Authentication:** The frontend gets a JWT token from `/api/login/` and saves it. It sends this token in headers for protected routes.
+2. **Setup Game:** 
+   - For **Solo/Bot**: The frontend calls `POST /api/games/` to create a new match. The backend returns the `Game ID`.
+   - For **Online Multiplayer**: The frontend calls `POST /api/matchmaking/join/` which puts the user in a queue or matches them directly. It returns the `Game ID`.
+3. **Connect WebSocket:** The frontend uses the `Game ID` to connect to `ws://127.0.0.1:8000/ws/game/<game_id>/`.
+4. **Initialize Board:** Upon connecting, the frontend will receive `connection_established`, and it should send `{"action": "get_state"}` to retrieve the current FEN to render the board properly.
+5. **Playing:** 
+   - A player moves a piece on UI.
+   - Frontend sends `{"action": "move", "from_square": "e2", "to_square": "e4"}`.
+   - Backend validates. If legal, saves and broadcasts backwards a `move_result` with updated FEN and game status.
+   - Frontend updates board state from FEN or animate piece to the target square.
+6. **Game Over:** Handled via the `game_over` WS event or checking `status` fields.
 
 ---
 
-## 🎮 Режимы игры
+## 📊 Database Models
 
-| Режим | Статус | Описание |
-|-------|--------|----------|
-| **Solo** | ✅ Готов | Один игрок ходит за обе стороны. Подключайся с `?type=solo` |
-| **Online** | ✅ Базовый | Два игрока в одной комнате, ходы транслируются обоим |
-| **Bot** | 🔜 Планируется | Игра против ИИ |
-
-### Solo-режим
-
-- Подключайся к `ws://127.0.0.1:8000/ws/game/anything/?type=solo`
-- Ходи за белых, потом за чёрных (поочерёдно)
-- Все ходы сохраняются в БД
-- При отключении доска очищается
-
-### Online-режим
-
-- Два клиента подключаются к **одному** `room_name`
-- Ходы одного игрока транслируются второму через channel layer
-- Сервер не проверяет, кто за белых/чёрных (пока)
-
----
-
-## 📊 Модели базы данных
-
-### Game
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `game_type` | ONLINE / SOLO / BOT | Тип игры |
-| `player_white` | CharField | Имя белого игрока |
-| `player_black` | CharField | Имя чёрного игрока |
-| `current_fen` | CharField | Текущая позиция (FEN) |
-| `status` | WAITING / IN_PROGRESS / CHECKMATE / STALEMATE / DRAW / RESIGNED | Статус |
-| `winner` | CharField | Победитель |
-| `created_at` | DateTime | Дата создания |
-| `last_move_at` | DateTime | Дата последнего хода |
-
-### Move
-
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `game` | FK → Game | Партия |
-| `move_number` | int | Номер хода |
-| `from_square` | CharField | Откуда (e2) |
-| `to_square` | CharField | Куда (e4) |
-| `piece_moved` | CharField | Фигура (Pawn, Knight, ...) |
-| `piece_captured` | CharField | Взятая фигура |
-| `promotion` | CharField | Превращение |
-| `is_check` | bool | Шах |
-| `is_checkmate` | bool | Мат |
-| `is_stalemate` | bool | Пат |
-
----
-
-## 🗂 Структура проекта
-
-```
-chess-project/
-├── backend/
-│   ├── backend/              # Django project settings
-│   │   ├── settings.py       # Настройки (DB, Channels, CORS)
-│   │   ├── urls.py           # Главные URL (/admin, /api)
-│   │   └── asgi.py           # ASGI для HTTP + WebSocket
-│   ├── game/                 # Основное приложение
-│   │   ├── engine/           # Шахматный движок
-│   │   │   ├── board.py      # Доска, логика ходов
-│   │   │   └── pieces.py     # Фигуры (Pawn, Rook, Knight, ...)
-│   │   ├── consumers.py      # WebSocket consumer (solo/online)
-│   │   ├── models.py         # Game, Move модели
-│   │   ├── serializers.py    # DRF сериализаторы
-│   │   ├── views.py          # REST API views
-│   │   ├── urls.py           # API URL маршруты
-│   │   └── routing.py        # WebSocket URL маршруты
-│   ├── db.sqlite3            # База данных
-│   ├── manage.py
-│   └── requirements.txt
-└── frontend/                 # Angular 21
-    ├── src/
-    └── package.json
-```
-
----
-
-## 🔮 Планы на будущее
-
-- [ ] **Модель Player** — рейтинг (ELO), статистика побед/поражений
-- [ ] **Аутентификация** — регистрация, логин, JWT-токены
-- [ ] **Matchmaking** — автоматический поиск соперника
-- [ ] **Bot-режим** — игра против ИИ (minimax)
-- [ ] **Фронтенд** — шахматная доска на Angular
-- [ ] **Redis** — channel layer для продакшена
-- [ ] **PostgreSQL** — миграция с SQLite
-
----
-
-## ⚙️ Для фронтенда (Angular)
-
-### Какие события слушать
-
-Фронтенд должен подключаться по WebSocket и обрабатывать следующие `type` в сообщениях:
-
-| `type` | Когда приходит | Что делать |
-|--------|---------------|------------|
-| `game_state` | При подключении, `get_state`, `new_game` | Отрисовать доску и фигуры |
-| `move_result` | После каждого хода | Обновить доску, показать анимацию хода |
-| `game_over` | При resign | Показать экран «Игра окончена» |
-| `error` | При некорректном ходе | Показать сообщение об ошибке |
-
-### Пример Angular WebSocket сервиса
-
-```typescript
-// game.service.ts
-import { Injectable } from '@angular/core';
-import { webSocket, WebSocketSubject } from 'rxjs/webSocket';
-
-@Injectable({ providedIn: 'root' })
-export class GameService {
-  private socket$!: WebSocketSubject<any>;
-
-  connect(roomName: string, type: 'solo' | 'online' = 'solo') {
-    this.socket$ = webSocket(
-      `ws://127.0.0.1:8000/ws/game/${roomName}/?type=${type}`
-    );
-    return this.socket$.asObservable();
-  }
-
-  sendMove(from: string, to: string, promotion?: string) {
-    this.socket$.next({
-      action: 'move',
-      from_square: from,
-      to_square: to,
-      ...(promotion && { promotion }),
-    });
-  }
-
-  resign() {
-    this.socket$.next({ action: 'resign' });
-  }
-
-  newGame() {
-    this.socket$.next({ action: 'new_game' });
-  }
-
-  disconnect() {
-    this.socket$.complete();
-  }
-}
-```
+- **User**: Django's built-in user class.
+- **Player**: Profile containing rating, bio, stats, linked One-to-One to the User.
+- **Game**: Records an active instance. Holds `game_type` (SOLO, ONLINE, BOT), white/black players, current board FEN, winner, and status.
+- **Move**: Historic individual turn details. Logs `from_square`, `to_square`, `piece_moved`, and updates statuses (checks/mates). Linked to a `Game`.
+- **MatchmakingQueue**: Stores users currently waiting for an online opponent along with their ratings.
