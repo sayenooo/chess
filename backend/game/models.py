@@ -17,10 +17,11 @@ class Player(models.Model):
         return f"{self.user.username} ({self.rating})"
 
 class MatchmakingQueue(models.Model):
-    player = models.OneToOneField(Player, on_delete=models.CASCADE)
+    player = models.OneToOneField(Player, on_delete=models.CASCADE, related_name='queue_status')
     rating = models.IntegerField()
     joined_at = models.DateTimeField(auto_now_add=True)
-    is_active = models.BooleanField(default=True)
+    min_rating = models.IntegerField(default=0)
+    max_rating = models.IntegerField(default=3000)
     class Meta:
         ordering = ['joined_at']
 
