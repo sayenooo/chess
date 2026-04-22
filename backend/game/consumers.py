@@ -13,12 +13,10 @@ logger = logging.getLogger(__name__)
 
 class ChessConsumer(AsyncJsonWebsocketConsumer):
     """
-    WebSocket consumer для шахматной игры.
-
-    Поддерживает три режима:
+    Три режима:
     - SOLO   — один игрок ходит за обе стороны (без group layer)
     - ONLINE — два игрока в одной комнате
-    - BOT    — (будущее) игрок vs бот
+    - BOT    — игрок vs бот
 
     Подключение:
         ws://host/ws/game/<room_name>/?type=solo
@@ -289,13 +287,6 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
         is_checkmate: bool,
         is_stalemate: bool,
     ):
-        """
-        Сохраняет ход асинхронно.
-
-        Django 6 поддерживает async ORM. Вместо синхронных
-        Game.objects.get() мы используем Game.objects.aget(),
-        чтобы не блокировать event loop WebSocket-сервера.
-        """
         try:
             game, _created = await Game.objects.aget_or_create(
                 id=self.room_name if self.room_name.isdigit() else None,

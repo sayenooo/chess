@@ -1,5 +1,31 @@
 from django.db import models
+from django.contrib.auth.models import User
 
+class Player(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='player_profile')
+    
+    rating = models.IntegerField(default=500)
+    wins = models.IntegerField(default=0)
+    losses = models.IntegerField(default=0)
+    draws = models.IntegerField(default=0)
+    
+    bio = models.TextField(max_length=500, blank=True, default='')
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.user.username} ({self.rating})"
+
+class MatchmakingQueue(models.Model):
+    player = models.OneToOneField(Player, on_delete=models.CASCADE)
+    rating = models.IntegerField()
+    joined_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    class Meta:
+        ordering = ['joined_at']
+
+    def __str__(self):
+        return f"Searching: {self.player.user.username} (Rating: {self.rating})"
 
 class Game(models.Model):
     class GameType(models.TextChoices):
@@ -21,8 +47,10 @@ class Game(models.Model):
         default=GameType.ONLINE,
     )
 
-    player_white = models.CharField(max_length=100, blank=True, default='')
-    player_black = models.CharField(max_length=100, blank=True, default='')
+    player_white = models.ForeignKey(Player, related_name='games_as_white', on_delete=models.SET_NULL, null=True, blank=True)
+    player_black = models.ForeignKey(Player, related_name='games_as_black', on_delete=models.SET_NULL, null=True, blank=True)
+
+    bot_level  = models.IntegerField(null=True, blank=True)
 
     STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
     current_fen = models.CharField(max_length=100, default=STARTING_FEN)
@@ -31,7 +59,7 @@ class Game(models.Model):
         choices=Status.choices,
         default=Status.WAITING,
     )
-    winner = models.CharField(max_length=10, blank=True, default='')
+    winner = models.ForeignKey(Player, related_name='won_games', on_delete=models.SET_NULL, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     last_move_at = models.DateTimeField(auto_now=True)
