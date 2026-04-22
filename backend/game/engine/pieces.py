@@ -188,7 +188,7 @@ class King(Piece):
                     rook = board.get_piece_at(row, rook_col)
                     if isinstance(rook, Rook) and not rook.has_moved:
                         if all(board.get_piece_at(row, c) is None for c in path):
-                            check_path = path[:2]
+                            check_path = path[-2:] if rook_col == 0 else path[:2]
                             if all(not board.is_under_attack(row, c, enemy_color) for c in check_path):
                                 moves.append((row, 2 if rook_col == 0 else 6))
                     

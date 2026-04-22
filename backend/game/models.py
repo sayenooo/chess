@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class Player(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='player_profile')
@@ -51,7 +52,11 @@ class Game(models.Model):
     player_white = models.ForeignKey(Player, related_name='games_as_white', on_delete=models.SET_NULL, null=True, blank=True)
     player_black = models.ForeignKey(Player, related_name='games_as_black', on_delete=models.SET_NULL, null=True, blank=True)
 
-    bot_level  = models.IntegerField(null=True, blank=True)
+    bot_level = models.IntegerField(
+        null=True, 
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    )
 
     STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
     current_fen = models.CharField(max_length=100, default=STARTING_FEN)
@@ -82,3 +87,4 @@ class Move(models.Model):
     is_check = models.BooleanField(default=False)
     is_checkmate = models.BooleanField(default=False)
     is_stalemate = models.BooleanField(default=False)
+    fen_after_move = models.CharField(max_length=100, blank=True, null=True)

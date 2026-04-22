@@ -1,7 +1,7 @@
 import logging
 from typing import ClassVar
 from urllib.parse import parse_qs
-
+from .bot import ChessBot
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from channels.db import database_sync_to_async
 from game.engine.board import Board, parse_square, format_square
@@ -76,6 +76,10 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 return
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
 
+        if self.room_name not in self.active_boards:
+            self.active_boards[self.room_name] = Board()
+        self.board = self.active_boards[self.room_name]
+
         await self.accept()
         
         await self.send_json({
@@ -119,10 +123,15 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             case 'new_game':
                 await self._handle_new_game()
             case 'get_state':
+                game = await self.get_game()
                 await self.send_json({
                     'type': 'game_state',
                     'game_type': self.game_type,
-                    'payload': self.board.to_dict(),
+                    'payload': {
+                        'fen': game.current_fen,
+                        'current_turn': self.board.current_turn,
+                        'status': game.status,
+                    },
                 })
             case _:
                 await self.send_json({
@@ -144,19 +153,20 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
         except (Game.DoesNotExist, ValueError):
             return None
 
-    async def _handle_move(self, content: dict):
+    async def _handle_move(self, content: dict, is_bot=False):
         # Game status check
         game = await self.get_game()
         if game.status in [Game.Status.CHECKMATE, Game.Status.STALEMATE, Game.Status.DRAW, Game.Status.RESIGNED]:
-            await self.send_json({
-                'type': 'error',
-                'payload': {'message': 'The game is already over, you can\'t make any moves!'}
-            })
+            if not is_bot:
+                await self.send_json({
+                    'type': 'error',
+                    'payload': {'message': 'The game is already over, you can\'t make any moves!'}
+                })
             return
 
         current_turn = self.board.current_turn
         
-        if self.user_color != 'both' and self.user_color != current_turn:
+        if not is_bot and self.user_color != 'both' and self.user_color != current_turn:
             await self.send_json({
                 'type': 'error',
                 'payload': {
@@ -205,9 +215,11 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 return
 
             piece_name = piece.__class__.__name__
-            captured_piece = self.board.make_move((from_row, from_col), (to_row, to_col), promotion)
+            captured_piece = self.board.move_piece((from_row, from_col), (to_row, to_col), promotion)
             captured_name = captured_piece.__class__.__name__ if captured_piece else ''
-
+            new_fen = self.board.get_fen()
+            game.current_fen = new_fen
+            await game.asave()
             is_check = self.board.is_in_check(self.board.current_turn)
             is_checkmate = self.board.is_checkmate(self.board.current_turn)
             is_stalemate = self.board.is_stalemate(self.board.current_turn)
@@ -224,6 +236,8 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                         'is_checkmate': is_checkmate,
                         'is_stalemate': is_stalemate,
                         'current_turn': self.board.current_turn,
+                        'fen': new_fen,
+                        'legal_moves': legal_moves
                     }
                 }
             )
@@ -239,6 +253,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 is_check=is_check,
                 is_checkmate=is_checkmate,
                 is_stalemate=is_stalemate,
+                fen_after_move=new_fen,
             )
 
             if is_checkmate:
@@ -273,6 +288,9 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
 
         except Exception:
             logger.exception('Error processing move')
+
+        if self.game_type == 'BOT' and game.status == Game.Status.IN_PROGRESS and not is_bot:
+            await self._trigger_bot_move(game)
 
     async def _handle_resign(self):
         game = await self.get_game()
@@ -310,24 +328,47 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
         self.active_boards[self.room_name] = Board()
         self.board = self.active_boards[self.room_name]
 
+        new_fen = self.board.get_fen()
+        game = await self.get_game()
+        if game:
+            game.current_fen = new_fen
+            game.status = Game.Status.IN_PROGRESS
+            game.winner = None
+            await game.asave()
+            
         payload = {
             'type': 'game_state',
             'game_type': self.game_type,
-            'payload': self.board.to_dict(),
+            'payload': {
+                'fen': new_fen,
+                'current_turn': self.board.current_turn,
+                'status': Game.Status.IN_PROGRESS,
+            },
         }
 
-        if self.is_solo:
+        if self.game_type == 'SOLO':
             await self.send_json(payload)
         else:
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    'type': 'game.new_game',
+                    'type': 'game_message',
                     'payload': payload,
                 },
             )
 
         logger.info('New game started in room %s', self.room_name)
+
+    async def _trigger_bot_move(self, game):
+        bot_action = await self.get_bot_move_async(game.bot_level, game.current_fen)
+        
+        if bot_action:
+            await self._handle_move(bot_action, is_bot=True)
+
+    @database_sync_to_async
+    def get_bot_move_async(self, level, move_history):
+        bot = ChessBot(level=level)
+        return bot.get_best_move(move_history)
 
     async def _save_move_to_db(
         self,

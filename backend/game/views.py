@@ -1,4 +1,5 @@
 import random
+from django.db.models import Q
 from rest_framework import viewsets, status, generics, permissions
 from django.contrib.auth.models import User
 from rest_framework.decorators import action
@@ -7,6 +8,11 @@ from django.db import transaction
 from .models import Game, Move, MatchmakingQueue
 from .serializers import GameSerializer, MoveSerializer, RegisterSerializer, UserSerializer
 
+def has_active_game(player):
+    return Game.objects.filter(
+        Q(player_white=player) | Q(player_black=player),
+        status=Game.Status.IN_PROGRESS
+    ).exists()
 
 class GameViewSet(viewsets.ModelViewSet):
     """
@@ -101,6 +107,11 @@ class MatchmakingViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def join(self, request):
         player = request.user.player_profile
+        if has_active_game(player):
+            return Response(
+                {"error": "You already have an active game!"}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
         rating_range = 100
         opponent_entry = MatchmakingQueue.objects.filter(
             rating__gte=player.rating - rating_range,
