@@ -436,6 +436,64 @@
   line-height: 1.5;
 }
 
+.bio-placeholder {
+  color: var(--text-muted) !important;
+  font-style: italic;
+}
+
+.profile-bio {
+  position: relative;
+}
+
+.edit-bio-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.2s;
+}
+
+.edit-bio-btn:hover {
+  color: var(--accent);
+}
+
+.profile-bio-edit {
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--bg-card);
+  border-radius: 10px;
+}
+
+.bio-textarea {
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 60px;
+}
+
+.bio-textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.edit-bio-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+
 .profile-since {
   color: var(--text-muted);
   font-size: 12px;

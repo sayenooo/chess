@@ -42,7 +42,7 @@
     <main class="content">
       @switch (activeSection) {
         @case ('main') { <app-home [user]="user" /> }
-        @case ('play') { <app-play [user]="user" (gameLock)="isGameLocked = $event" /> }
+        @case ('play') { <app-play [user]="user" (gameLock)="isGameLocked = $event" (userUpdated)="onUserUpdated($event)" /> }
         @case ('learn') { <app-learn /> }
         @case ('news') { <app-news /> }
       }
@@ -122,10 +122,25 @@
             </div>
           </div>
 
-          @if (user.player_profile.bio) {
+          <!-- Bio section with [(ngModel)] -->
+          @if (editingBio) {
+            <div class="profile-bio-edit">
+              <span class="bio-label">Bio</span>
+              <textarea [(ngModel)]="bioText" class="bio-textarea" placeholder="Write something about yourself..." rows="3" maxlength="500" id="bio-textarea"></textarea>
+              <div class="edit-bio-actions">
+                <button class="save-btn" (click)="saveBio()">Save</button>
+                <button class="cancel-btn" (click)="cancelEditBio()">Cancel</button>
+              </div>
+            </div>
+          } @else {
             <div class="profile-bio">
               <span class="bio-label">Bio</span>
-              <p>{{ user.player_profile.bio }}</p>
+              @if (user.player_profile.bio) {
+                <p>{{ user.player_profile.bio }}</p>
+              } @else {
+                <p class="bio-placeholder">No bio yet</p>
+              }
+              <button class="edit-bio-btn" (click)="startEditBio()" title="Edit Bio">✎</button>
             </div>
           }
 

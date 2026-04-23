@@ -194,6 +194,39 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
         except Exception:
             return []
 
+    @database_sync_to_async
+    def _update_ratings(self, game, winner_color=None, is_draw=False):
+        """Update player ratings and stats after an ONLINE game ends."""
+        if game.game_type != 'ONLINE':
+            return
+        
+        white = game.player_white
+        black = game.player_black
+        if not white or not black:
+            return
+
+        RATING_DELTA = 15
+
+        if is_draw:
+            white.draws += 1
+            black.draws += 1
+            white.save()
+            black.save()
+        elif winner_color == 'white':
+            white.rating += RATING_DELTA
+            white.wins += 1
+            black.rating = max(0, black.rating - RATING_DELTA)
+            black.losses += 1
+            white.save()
+            black.save()
+        elif winner_color == 'black':
+            black.rating += RATING_DELTA
+            black.wins += 1
+            white.rating = max(0, white.rating - RATING_DELTA)
+            white.losses += 1
+            white.save()
+            black.save()
+
     def _compute_notation(self, piece, from_row, from_col, to_row, to_col, captured_piece, promotion, is_check, is_checkmate):
         """Compute standard algebraic notation for a move."""
         piece_name = piece.__class__.__name__
@@ -356,6 +389,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 game.status = Game.Status.RESIGNED
                 game.winner = game.player_white if timeout_winner == 'white' else game.player_black
                 await game.asave()
+                await self._update_ratings(game, winner_color=timeout_winner)
                 await self.channel_layer.group_send(
                     self.room_group_name,
                     {
@@ -410,6 +444,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 winner_color = 'white' if self.board.current_turn == 'black' else 'black'
                 game.winner = game.player_white if winner_color == 'white' else game.player_black
                 await game.asave()
+                await self._update_ratings(game, winner_color=winner_color)
                 
                 await self.channel_layer.group_send(
                     self.room_group_name,
@@ -424,6 +459,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             elif is_stalemate:
                 game.status = Game.Status.STALEMATE
                 await game.asave()
+                await self._update_ratings(game, is_draw=True)
                 
                 await self.channel_layer.group_send(
                     self.room_group_name,
@@ -461,6 +497,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             game.winner = game.player_black
             
         await game.asave()
+        await self._update_ratings(game, winner_color=winner_color)
 
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -523,6 +560,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 return
             game.status = Game.Status.DRAW
             await game.asave()
+            await self._update_ratings(game, is_draw=True)
 
             await self.channel_layer.group_send(
                 self.room_group_name,

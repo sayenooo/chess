@@ -1,5 +1,6 @@
-import { Component, Input, OnInit, inject, NgZone } from '@angular/core';
+import { Component, OnInit, inject, input } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
 import { ApiService, Game, UserProfile } from '../../../../services/api.service';
 import { parseFEN, pieceToImagePath, Piece } from '../../../../services/fen-parser';
 
@@ -19,9 +20,8 @@ interface MovePair {
   styleUrl: './home.component.css'
 })
 export class HomeComponent implements OnInit {
-  @Input() user: UserProfile | null = null;
+  readonly user = input<UserProfile | null>(null);
   private api = inject(ApiService);
-  private ngZone = inject(NgZone);
 
   games: Game[] = [];
   displayCount = 10;
@@ -40,14 +40,14 @@ export class HomeComponent implements OnInit {
   readonly RANKS = [8, 7, 6, 5, 4, 3, 2, 1];
   private readonly DEFAULT_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-  ngOnInit() {
-    this.api.getGames({ mine: true }).subscribe({
-      next: (games) => {
-        this.games = games;
-        this.loading = false;
-      },
-      error: () => (this.loading = false)
-    });
+  async ngOnInit() {
+    try {
+      this.games = await firstValueFrom(this.api.getGames({ mine: true }));
+    } catch {
+      // ignore
+    } finally {
+      this.loading = false;
+    }
   }
 
   get visibleGames(): Game[] {
@@ -63,10 +63,11 @@ export class HomeComponent implements OnInit {
   }
 
   getResult(game: Game): 'win' | 'loss' | 'draw' | 'ongoing' {
+    const u = this.user();
     if (game.status === 'IN_PROGRESS' || game.status === 'WAITING') return 'ongoing';
     if (game.status === 'STALEMATE' || game.status === 'DRAW') return 'draw';
-    if (!this.user || game.winner === null) return 'draw';
-    if (game.winner === this.user.id) return 'win';
+    if (!u || game.winner === null) return 'draw';
+    if (game.winner === u.id) return 'win';
     return 'loss';
   }
 
@@ -79,45 +80,56 @@ export class HomeComponent implements OnInit {
   }
 
   getOpponent(game: Game): string {
-    if (!this.user) return '—';
+    const u = this.user();
+    if (!u) return '—';
     if (game.game_type === 'SOLO') return 'Solo';
     if (game.game_type === 'BOT') return `Bot (Lv.${game.bot_level || '?'})`;
-    if (game.player_white === this.user.id) return game.player_black_name || '—';
+    if (game.player_white === u.id) return game.player_black_name || '—';
     return game.player_white_name || '—';
+  }
+
+  getRatingChange(game: Game): string {
+    if (game.game_type !== 'ONLINE') return '';
+    const r = this.getResult(game);
+    if (r === 'ongoing') return '';
+    if (r === 'win') return '+15';
+    if (r === 'loss') return '-15';
+    return '+0';
+  }
+
+  getRatingClass(game: Game): string {
+    const r = this.getResult(game);
+    if (r === 'win') return 'rating-up';
+    if (r === 'loss') return 'rating-down';
+    return 'rating-neutral';
   }
 
   // --- Replay ---
 
-  openGame(game: Game) {
+  async openGame(game: Game) {
     this.replayGame = game;
     this.replayLoading = true;
     this.replayOpen = true;
 
-    this.api.getGameMoves(game.id).subscribe({
-      next: (moves) => {
-        this.ngZone.run(() => {
-          this.replayMoves = moves;
-          this.buildMovePairs(moves);
-          if (moves.length > 0) {
-            this.replayIndex = moves.length - 1;
-            this.replayBoard = parseFEN(moves[moves.length - 1].fen_after_move || this.DEFAULT_FEN);
-          } else {
-            this.replayIndex = -1;
-            this.replayBoard = parseFEN(game.current_fen || this.DEFAULT_FEN);
-          }
-          this.replayLoading = false;
-        });
-      },
-      error: () => {
-        this.ngZone.run(() => {
-          this.replayLoading = false;
-          this.replayBoard = parseFEN(game.current_fen || this.DEFAULT_FEN);
-          this.replayMoves = [];
-          this.buildMovePairs([]);
-          this.replayIndex = -1;
-        });
+    try {
+      const moves = await firstValueFrom(this.api.getGameMoves(game.id));
+      this.replayMoves = moves;
+      this.buildMovePairs(moves);
+      if (moves.length > 0) {
+        this.replayIndex = moves.length - 1;
+        this.replayBoard = parseFEN(moves[moves.length - 1].fen_after_move || this.DEFAULT_FEN);
+      } else {
+        this.replayIndex = -1;
+        this.replayBoard = parseFEN(game.current_fen || this.DEFAULT_FEN);
       }
-    });
+    } catch {
+      this.replayBoard = parseFEN(game.current_fen || this.DEFAULT_FEN);
+      this.replayMoves = [];
+      this.buildMovePairs([]);
+      this.replayIndex = -1;
+    } finally {
+      this.replayLoading = false;
+    }
   }
 
   private buildMovePairs(moves: any[]) {

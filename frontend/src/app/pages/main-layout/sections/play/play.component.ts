@@ -1,7 +1,7 @@
-import { Component, Input, Output, EventEmitter, OnDestroy, OnInit, inject, NgZone, ChangeDetectorRef, afterNextRender } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, NgZone, ChangeDetectorRef, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { ApiService, Game, UserProfile } from '../../../../services/api.service';
 import { GameService } from '../../../../services/game.service';
 import { parseFEN, pieceToImagePath, Piece } from '../../../../services/fen-parser';
@@ -28,8 +28,9 @@ interface MovePair {
   styleUrl: './play.component.css'
 })
 export class PlayComponent implements OnInit, OnDestroy {
-  @Input() user: UserProfile | null = null;
-  @Output() gameLock = new EventEmitter<boolean>();
+  readonly user = input<UserProfile | null>(null);
+  readonly gameLock = output<boolean>();
+  readonly userUpdated = output<UserProfile>();
   private api = inject(ApiService);
   private gameService = inject(GameService);
   private ngZone = inject(NgZone);
@@ -88,12 +89,11 @@ export class PlayComponent implements OnInit, OnDestroy {
 
   constructor() {
     this.boardData = parseFEN(this.DEFAULT_FEN);
-    afterNextRender(() => {
-      this.checkActiveGames();
-    });
   }
 
-  ngOnInit() {}
+  ngOnInit() {
+    this.checkActiveGames();
+  }
 
   // --- Board helpers ---
 
@@ -129,11 +129,11 @@ export class PlayComponent implements OnInit, OnDestroy {
   }
 
   get playerName(): string {
-    return this.user?.username ?? 'Player';
+    return this.user()?.username ?? 'Player';
   }
 
   get playerRating(): number {
-    return this.user?.player_profile?.rating ?? 500;
+    return this.user()?.player_profile?.rating ?? 500;
   }
 
   // --- Timer ---
@@ -178,17 +178,18 @@ export class PlayComponent implements OnInit, OnDestroy {
 
   // --- Check for active games (rejoin) ---
 
-  private checkActiveGames() {
-    this.api.getActiveGames().subscribe({
-      next: (games) => {
-        this.ngZone.run(() => {
-          const onlineGame = games.find(g => g.game_type === 'ONLINE');
-          const botGame = games.find(g => g.game_type === 'BOT');
-          this.activeGame = onlineGame || botGame || null;
-          this.cdr.detectChanges();
-        });
-      }
-    });
+  private async checkActiveGames() {
+    try {
+      const games = await firstValueFrom(this.api.getActiveGames());
+      this.ngZone.run(() => {
+        const onlineGame = games.find(g => g.game_type === 'ONLINE');
+        const botGame = games.find(g => g.game_type === 'BOT');
+        this.activeGame = onlineGame || botGame || null;
+        this.cdr.detectChanges();
+      });
+    } catch {
+      // ignore
+    }
   }
 
   resumeGame(game: Game) {
@@ -304,8 +305,9 @@ export class PlayComponent implements OnInit, OnDestroy {
   }
 
   private loadOpponentInfo(game: Game) {
-    if (!this.user) return;
-    if (game.player_white_name === this.user.username) {
+    const u = this.user();
+    if (!u) return;
+    if (game.player_white_name === u.username) {
       this.opponentName = game.player_black_name || 'Bot';
     } else {
       this.opponentName = game.player_white_name || 'Bot';
@@ -419,7 +421,7 @@ export class PlayComponent implements OnInit, OnDestroy {
     }
   }
 
-  private handleGameOver(payload: any) {
+  private async handleGameOver(payload: any) {
     this.stopTimer();
     this.gameOverData = {
       reason: payload.reason,
@@ -434,6 +436,14 @@ export class PlayComponent implements OnInit, OnDestroy {
       else this.ratingChange = 0;
     } else {
       this.ratingChange = 0;
+    }
+
+    // Refresh profile to get updated rating/wins/losses from the server
+    try {
+      const updatedProfile = await firstValueFrom(this.api.getProfile());
+      this.userUpdated.emit(updatedProfile);
+    } catch {
+      // ignore — profile will update on next navigation
     }
   }
 

@@ -690,3 +690,15 @@
   background: linear-gradient(135deg, #dbb85c, #b89a4a);
   transform: translateY(-1px);
 }
+
+/* Hidden selects (synced via ngModel, not visible) */
+.hidden-select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
