@@ -1,0 +1,17 @@
+<div class="auth-container">
+  <h2>Регистрация Нового Игрока</h2>
+  
+  <div class="input-group">
+    <input type="text" [(ngModel)]="registrationData.username" placeholder="Username (например: Zhansaya)">
+  </div>
+
+  <div class="input-group">
+    <input type="email" [(ngModel)]="registrationData.email" placeholder="Email (test1@kbtu.kz)">
+  </div>
+
+  <div class="input-group">
+    <input type="password" [(ngModel)]="registrationData.password" placeholder="Password">
+  </div>
+
+  <button (click)="onRegister()">Зарегистрироваться</button>
+</div>
