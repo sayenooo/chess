@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import ClassVar
 from urllib.parse import parse_qs
 from .bot import ChessBot
@@ -30,6 +31,8 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
     """
 
     active_boards: ClassVar[dict[str, Board]] = {}
+    _draw_offered_by: ClassVar[dict[str, str]] = {}  # room_name -> color that offered
+    _last_move_ts: ClassVar[dict[str, float]] = {}    # room_name -> timestamp of last move
 
     async def connect(self):
         self.user = self.scope['user']
@@ -77,15 +80,32 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_add(self.room_group_name, self.channel_name)
 
         if self.room_name not in self.active_boards:
-            self.active_boards[self.room_name] = Board()
+            # Rebuild board from saved moves (for rejoin after server restart)
+            board = Board()
+            moves = await self._get_saved_moves()
+            for m in moves:
+                try:
+                    fr, fc = parse_square(m['from_square'])
+                    tr, tc = parse_square(m['to_square'])
+                    board.move_piece((fr, fc), (tr, tc), m.get('promotion', 'Queen'))
+                except Exception:
+                    pass
+            self.active_boards[self.room_name] = board
         self.board = self.active_boards[self.room_name]
+
+        # Init move timestamp for timer if not set
+        if self.room_name not in self._last_move_ts:
+            self._last_move_ts[self.room_name] = time.time()
 
         await self.accept()
         
         await self.send_json({
             'type': 'connection_established',
             'color': self.user_color,
-            'game_type': self.game_type
+            'game_type': self.game_type,
+            'white_time': game.white_time_remaining,
+            'black_time': game.black_time_remaining,
+            'current_turn': self.board.current_turn,
         })
 
     async def disconnect(self, close_code):
@@ -121,6 +141,10 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 await self._handle_resign()
             case 'new_game':
                 await self._handle_new_game()
+            case 'offer_draw':
+                await self._handle_offer_draw()
+            case 'respond_draw':
+                await self._handle_respond_draw(content.get('accepted', False))
             case 'get_state':
                 game = await self.get_game()
                 if not game:
@@ -132,6 +156,8 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                         'fen': game.current_fen,
                         'current_turn': self.board.current_turn,
                         'status': game.status,
+                        'white_time': game.white_time_remaining,
+                        'black_time': game.black_time_remaining,
                     },
                 })
             case _:
@@ -139,7 +165,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                     'type': 'error',
                     'payload': {
                         'message': f'Unknown action: {action}',
-                        'valid_actions': ['move', 'resign', 'get_state', 'new_game'],
+                        'valid_actions': ['move', 'resign', 'get_state', 'new_game', 'offer_draw', 'respond_draw'],
                     },
                 })
     
@@ -155,6 +181,79 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             ).get(id=self.room_name)
         except (Game.DoesNotExist, ValueError):
             return None
+
+    @database_sync_to_async
+    def _get_saved_moves(self):
+        """Get saved moves from DB to rebuild board state."""
+        try:
+            return list(
+                Move.objects.filter(game_id=self.room_name)
+                .order_by('move_number', 'id')
+                .values('from_square', 'to_square', 'promotion')
+            )
+        except Exception:
+            return []
+
+    def _compute_notation(self, piece, from_row, from_col, to_row, to_col, captured_piece, promotion, is_check, is_checkmate):
+        """Compute standard algebraic notation for a move."""
+        piece_name = piece.__class__.__name__
+
+        # Castling
+        if piece_name == 'King' and abs(from_col - to_col) == 2:
+            notation = 'O-O' if to_col == 6 else 'O-O-O'
+            if is_checkmate:
+                notation += '#'
+            elif is_check:
+                notation += '+'
+            return notation
+
+        parts = []
+
+        # Piece letter (no letter for pawn)
+        piece_letters = {'King': 'K', 'Queen': 'Q', 'Rook': 'R', 'Bishop': 'B', 'Knight': 'N'}
+        if piece_name in piece_letters:
+            parts.append(piece_letters[piece_name])
+
+            # Disambiguation: check if another piece of same type+color can reach the same square
+            for r in range(8):
+                for c in range(8):
+                    if (r, c) == (from_row, from_col):
+                        continue
+                    other = self.board.get_piece_at(r, c)
+                    if other and other.__class__.__name__ == piece_name and other.color == piece.color:
+                        other_moves = other.get_legal_moves(self.board)
+                        if (to_row, to_col) in other_moves:
+                            if from_col != c:
+                                parts.append(format_square(from_row, from_col)[0])  # file
+                            elif from_row != r:
+                                parts.append(format_square(from_row, from_col)[1])  # rank
+                            else:
+                                parts.append(format_square(from_row, from_col))
+                            break
+
+        # Pawn captures need the file
+        if piece_name == 'Pawn' and captured_piece:
+            parts.append(format_square(from_row, from_col)[0])
+
+        # Capture
+        if captured_piece:
+            parts.append('x')
+
+        # Destination square
+        parts.append(format_square(to_row, to_col))
+
+        # Promotion
+        if piece_name == 'Pawn' and (to_row == 7 or to_row == 0):
+            promo_letters = {'Queen': 'Q', 'Rook': 'R', 'Bishop': 'B', 'Knight': 'N'}
+            parts.append('=' + promo_letters.get(promotion, 'Q'))
+
+        # Check / Checkmate
+        if is_checkmate:
+            parts.append('#')
+        elif is_check:
+            parts.append('+')
+
+        return ''.join(parts)
 
     async def _handle_move(self, content: dict, is_bot=False):
         # Game status check
@@ -224,11 +323,51 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             captured_piece = self.board.move_piece((from_row, from_col), (to_row, to_col), promotion)
             captured_name = captured_piece.__class__.__name__ if captured_piece else ''
             new_fen = self.board.get_fen()
-            game.current_fen = new_fen
-            await game.asave()
             is_check = self.board.is_in_check(self.board.current_turn)
             is_checkmate = self.board.is_checkmate(self.board.current_turn)
             is_stalemate = self.board.is_stalemate(self.board.current_turn)
+
+            # Compute algebraic notation
+            notation = self._compute_notation(
+                piece, from_row, from_col, to_row, to_col,
+                captured_piece, promotion, is_check, is_checkmate
+            )
+
+            # Clear any pending draw offer on a new move
+            self._draw_offered_by.pop(self.room_name, None)
+
+            # Timer deduction
+            now = time.time()
+            elapsed = now - self._last_move_ts.get(self.room_name, now)
+            self._last_move_ts[self.room_name] = now
+
+            if current_turn == 'white':
+                game.white_time_remaining = max(0, game.white_time_remaining - elapsed)
+            else:
+                game.black_time_remaining = max(0, game.black_time_remaining - elapsed)
+
+            game.current_fen = new_fen
+            await game.asave()
+
+            # Check for timeout
+            if game.white_time_remaining <= 0 or game.black_time_remaining <= 0:
+                timeout_loser = 'white' if game.white_time_remaining <= 0 else 'black'
+                timeout_winner = 'black' if timeout_loser == 'white' else 'white'
+                game.status = Game.Status.RESIGNED
+                game.winner = game.player_white if timeout_winner == 'white' else game.player_black
+                await game.asave()
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {
+                        'type': 'game_over',
+                        'payload': {
+                            'reason': 'timeout',
+                            'winner': timeout_winner,
+                            'loser': timeout_loser
+                        }
+                    }
+                )
+                return
 
             await self.channel_layer.group_send(
                 self.room_group_name,
@@ -243,6 +382,9 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                         'is_stalemate': is_stalemate,
                         'current_turn': self.board.current_turn,
                         'fen': new_fen,
+                        'notation': notation,
+                        'white_time': game.white_time_remaining,
+                        'black_time': game.black_time_remaining,
                         'legal_moves': legal_moves
                     }
                 }
@@ -256,6 +398,7 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 piece_moved=piece_name,
                 piece_captured=captured_name,
                 promotion=promotion,
+                notation=notation,
                 is_check=is_check,
                 is_checkmate=is_checkmate,
                 is_stalemate=is_stalemate,
@@ -331,10 +474,77 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             }
         )
 
+    async def _handle_offer_draw(self):
+        """Handle a draw offer (online only)."""
+        if self.game_type != 'ONLINE':
+            await self.send_json({
+                'type': 'error',
+                'payload': {'message': 'Draw offers are only available in online games.'}
+            })
+            return
+
+        game = await self.get_game()
+        if not game or game.status != Game.Status.IN_PROGRESS:
+            return
+
+        # Prevent double-offering
+        if self.room_name in self._draw_offered_by:
+            await self.send_json({
+                'type': 'error',
+                'payload': {'message': 'A draw has already been offered. Wait for response.'}
+            })
+            return
+
+        self._draw_offered_by[self.room_name] = self.user_color
+
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'game_draw_offer',
+                'payload': {'offered_by': self.user_color}
+            }
+        )
+
+    async def _handle_respond_draw(self, accepted: bool):
+        """Handle response to a draw offer."""
+        if self.room_name not in self._draw_offered_by:
+            return
+
+        offered_by = self._draw_offered_by.get(self.room_name)
+        # Only the non-offering player can respond
+        if self.user_color == offered_by:
+            return
+
+        self._draw_offered_by.pop(self.room_name, None)
+
+        if accepted:
+            game = await self.get_game()
+            if not game or game.status != Game.Status.IN_PROGRESS:
+                return
+            game.status = Game.Status.DRAW
+            await game.asave()
+
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_over',
+                    'payload': {'reason': 'draw', 'winner': ''}
+                }
+            )
+        else:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_draw_declined',
+                    'payload': {'declined_by': self.user_color}
+                }
+            )
+
     async def _handle_new_game(self):
         """Reset the board and start a new game in the same room."""
         self.active_boards[self.room_name] = Board()
         self.board = self.active_boards[self.room_name]
+        self._draw_offered_by.pop(self.room_name, None)
 
         new_fen = self.board.get_fen()
         game = await self.get_game()
@@ -433,6 +643,18 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
     async def game_over(self, event):
         await self.send_json({
             'type': 'game_over',
+            'payload': event['payload'],
+        })
+
+    async def game_draw_offer(self, event):
+        await self.send_json({
+            'type': 'draw_offer',
+            'payload': event['payload'],
+        })
+
+    async def game_draw_declined(self, event):
+        await self.send_json({
+            'type': 'draw_declined',
             'payload': event['payload'],
         })
 

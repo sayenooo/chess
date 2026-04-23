@@ -1,0 +1,131 @@
+<div class="home">
+  <div class="welcome-card">
+    <h2>Welcome back, <span class="accent">{{ user?.username || 'Player' }}</span></h2>
+    <div class="quick-stats">
+      <div class="qs-item">
+        <span class="qs-val">{{ user?.player_profile?.rating || 500 }}</span>
+        <span class="qs-label">Rating</span>
+      </div>
+      <div class="qs-item win">
+        <span class="qs-val">{{ user?.player_profile?.wins || 0 }}</span>
+        <span class="qs-label">Wins</span>
+      </div>
+      <div class="qs-item loss">
+        <span class="qs-val">{{ user?.player_profile?.losses || 0 }}</span>
+        <span class="qs-label">Losses</span>
+      </div>
+      <div class="qs-item">
+        <span class="qs-val">{{ user?.player_profile?.draws || 0 }}</span>
+        <span class="qs-label">Draws</span>
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-title">Game History</h3>
+
+  @if (loading) {
+    <div class="loading">Loading games...</div>
+  } @else if (games.length === 0) {
+    <div class="empty">No games played yet. Go to <strong>Play</strong> to start your first game!</div>
+  } @else {
+    <div class="game-list">
+      @for (game of visibleGames; track game.id) {
+        <div class="game-card" [class]="getResult(game)" (click)="openGame(game)">
+          <div class="game-type">{{ game.game_type }}</div>
+          <div class="game-opponent">vs {{ getOpponent(game) }}</div>
+          <div class="game-result" [class]="getResult(game)">{{ getResultText(game) }}</div>
+          <div class="game-status">{{ game.status }}</div>
+          <div class="game-date">{{ game.created_at | date:'short' }}</div>
+          <div class="game-arrow">▶</div>
+        </div>
+      }
+    </div>
+
+    @if (hasMore) {
+      <button class="show-more-btn" (click)="showMore()" id="show-more-btn">
+        Show More
+      </button>
+    }
+  }
+
+  <!-- ========== REPLAY OVERLAY ========== -->
+  @if (replayOpen && replayGame) {
+    <div class="replay-backdrop" (click)="closeReplay()"></div>
+    <div class="replay-overlay">
+      <div class="replay-header">
+        <h3>
+          {{ replayGame.game_type }} — {{ replayGame.player_white_name || '?' }} vs {{ replayGame.player_black_name || '?' }}
+        </h3>
+        <button class="replay-close-btn" (click)="closeReplay()">✕</button>
+      </div>
+
+      @if (replayLoading) {
+        <div class="replay-loading">Loading game...</div>
+      } @else {
+        <div class="replay-body">
+          <!-- Replay Board -->
+          <div class="replay-board-area">
+            <div class="board-container">
+              <div class="rank-labels">
+                @for (r of RANKS; track r) { <span>{{ r }}</span> }
+              </div>
+              <div class="board">
+                @for (r of RANKS; track r) {
+                  @for (f of FILES; track f) {
+                    <div class="sq" [class.dark]="isDark(f, r)" [class.light]="!isDark(f, r)">
+                      @if (getPieceImage(getPieceAt(f, r))) {
+                        <img class="piece-img" [src]="getPieceImage(getPieceAt(f, r))" alt="">
+                      }
+                    </div>
+                  }
+                }
+              </div>
+            </div>
+            <div class="file-labels">
+              <div class="file-spacer"></div>
+              @for (f of FILES; track f) { <span>{{ f }}</span> }
+            </div>
+
+            <!-- Navigation controls -->
+            <div class="replay-nav">
+              <button class="nav-btn" (click)="goToStart()" [disabled]="replayIndex === -1" title="Start">⏮</button>
+              <button class="nav-btn" (click)="prevMove()" [disabled]="replayIndex === -1" title="Previous">◀</button>
+              <span class="nav-pos">{{ replayIndex + 1 }} / {{ replayMoves.length }}</span>
+              <button class="nav-btn" (click)="nextMove()" [disabled]="replayIndex >= replayMoves.length - 1" title="Next">▶</button>
+              <button class="nav-btn" (click)="goToEnd()" [disabled]="replayIndex >= replayMoves.length - 1" title="End">⏭</button>
+            </div>
+          </div>
+
+          <!-- Replay notation panel -->
+          <div class="replay-notation-panel">
+            <h4>Moves</h4>
+            <div class="replay-notation-table">
+              @if (replayMovePairs.length === 0) {
+                <span class="moves-empty">No moves recorded</span>
+              }
+              @for (pair of replayMovePairs; track pair.number) {
+                <div class="notation-row">
+                  <span class="notation-num">{{ pair.number }}.</span>
+                  <span
+                    class="notation-white"
+                    [class.active-move]="isMoveActive($index, 'white')"
+                    (click)="onMoveClick($index, 'white')"
+                  >{{ pair.white }}</span>
+                  @if (pair.black) {
+                    <span
+                      class="notation-black"
+                      [class.active-move]="isMoveActive($index, 'black')"
+                      (click)="onMoveClick($index, 'black')"
+                    >{{ pair.black }}</span>
+                  } @else {
+                    <span class="notation-black"></span>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

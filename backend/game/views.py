@@ -23,7 +23,9 @@ class GameViewSet(viewsets.ModelViewSet):
     GET  /api/games/<id>/moves/   — список ходов конкретной игры
     POST /api/games/              — создание новой игры
     """
-    queryset = Game.objects.all().order_by('-created_at')
+    queryset = Game.objects.all().order_by('-created_at').select_related(
+        'player_white__user', 'player_black__user', 'winner__user'
+    )
     serializer_class = GameSerializer
     permission_classes = (permissions.IsAuthenticated,)
 
@@ -40,6 +42,12 @@ class GameViewSet(viewsets.ModelViewSet):
         if game_type:
             queryset = queryset.filter(game_type=game_type.upper())
 
+        # Filter by current user: ?mine=true
+        mine = self.request.query_params.get('mine')
+        if mine:
+            player = self.request.user.player_profile
+            queryset = queryset.filter(Q(player_white=player) | Q(player_black=player))
+
         return queryset
 
     def create(self, request, *args, **kwargs):
@@ -48,6 +56,8 @@ class GameViewSet(viewsets.ModelViewSet):
         game_type = request.data.get('game_type', Game.GameType.SOLO)
         bot_level = request.data.get('bot_level')
         requested_side = request.data.get('side', 'white')
+        time_control = int(request.data.get('time_control', 15))
+        time_seconds = time_control * 60
         
         if requested_side == 'random':
             actual_side = random.choice(['white', 'black'])
@@ -64,6 +74,9 @@ class GameViewSet(viewsets.ModelViewSet):
             player_white=p_white,
             player_black=p_black,
             bot_level=bot_level if game_type == Game.GameType.BOT else None,
+            time_control=time_control,
+            white_time_remaining=time_seconds,
+            black_time_remaining=time_seconds,
             status=Game.Status.IN_PROGRESS
         )
         serializer = self.get_serializer(new_game)
@@ -99,6 +112,41 @@ class CurrentUserView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+class UpdateAvatarView(generics.UpdateAPIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def patch(self, request, *args, **kwargs):
+        player = request.user.player_profile
+        avatar = request.FILES.get('avatar')
+        if not avatar:
+            return Response({"error": "No avatar file provided"}, status=status.HTTP_400_BAD_REQUEST)
+        player.avatar = avatar
+        player.save()
+        return Response({"avatar": player.avatar.url if player.avatar else None})
+
+    def delete(self, request, *args, **kwargs):
+        player = request.user.player_profile
+        if player.avatar:
+            player.avatar.delete(save=False)
+            player.avatar = None
+            player.save()
+        return Response({"avatar": None})
+
+class UpdateUsernameView(generics.UpdateAPIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def patch(self, request, *args, **kwargs):
+        new_username = request.data.get('username', '').strip()
+        if not new_username:
+            return Response({"error": "Username is required"}, status=status.HTTP_400_BAD_REQUEST)
+        if len(new_username) < 3:
+            return Response({"error": "Username must be at least 3 characters"}, status=status.HTTP_400_BAD_REQUEST)
+        if User.objects.filter(username=new_username).exclude(pk=request.user.pk).exists():
+            return Response({"error": "Username already taken"}, status=status.HTTP_400_BAD_REQUEST)
+        request.user.username = new_username
+        request.user.save()
+        return Response({"username": new_username})
     
 class MatchmakingViewSet(viewsets.ViewSet):
     permission_classes = (permissions.IsAuthenticated,)
@@ -107,11 +155,20 @@ class MatchmakingViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def join(self, request):
         player = request.user.player_profile
-        if has_active_game(player):
-            return Response(
-                {"error": "You already have an active game!"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        
+        # Only check for active ONLINE games (not SOLO/BOT)
+        active_online = Game.objects.filter(
+            Q(player_white=player) | Q(player_black=player),
+            status=Game.Status.IN_PROGRESS,
+            game_type=Game.GameType.ONLINE
+        ).order_by('-created_at').first()
+        
+        if active_online:
+            return Response({
+                "status": "game_found",
+                "game_id": active_online.id
+            }, status=status.HTTP_200_OK)
+        
         rating_range = 100
         opponent_entry = MatchmakingQueue.objects.filter(
             rating__gte=player.rating - rating_range,
@@ -122,12 +179,18 @@ class MatchmakingViewSet(viewsets.ViewSet):
             opponent = opponent_entry.player
             players = [player, opponent]
             random.shuffle(players)
+            time_seconds = 15 * 60
             with transaction.atomic():
                 opponent_entry.delete()
+                # Also clean up our own queue entry if present
+                MatchmakingQueue.objects.filter(player=player).delete()
                 new_game = Game.objects.create(
                     game_type=Game.GameType.ONLINE,
                     player_white=players[0],
                     player_black=players[1],
+                    time_control=15,
+                    white_time_remaining=time_seconds,
+                    black_time_remaining=time_seconds,
                     status=Game.Status.IN_PROGRESS
                 )
             return Response({
@@ -135,7 +198,7 @@ class MatchmakingViewSet(viewsets.ViewSet):
                 "game_id": new_game.id
             }, status=status.HTTP_201_CREATED)
         
-        MatchmakingQueue.objects.get_or_create(
+        MatchmakingQueue.objects.update_or_create(
             player=player,
             defaults={'rating': player.rating}
         )

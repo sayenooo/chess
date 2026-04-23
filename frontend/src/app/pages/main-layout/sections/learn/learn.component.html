@@ -1,0 +1,62 @@
+<div class="learn">
+  @if (!selectedOpening) {
+    <h2 class="page-title">Openings & Gambits</h2>
+    <p class="page-desc">Learn the most popular chess openings step by step.</p>
+    <div class="opening-list">
+      @for (op of openings; track op.name) {
+        <button class="opening-card" (click)="selectOpening(op)">
+          <h3>{{ op.name }}</h3>
+          <p>{{ op.description }}</p>
+          <span class="card-arrow">→</span>
+        </button>
+      }
+    </div>
+  } @else {
+    <div class="learn-detail">
+      <button class="back-btn" (click)="back()">← Back to Openings</button>
+      <h2>{{ selectedOpening.name }}</h2>
+
+      <div class="learn-content">
+        <!-- Mini Board -->
+        <div class="mini-board-area">
+          <div class="mini-board">
+            @for (row of [0,1,2,3,4,5,6,7]; track row) {
+              @for (col of [0,1,2,3,4,5,6,7]; track col) {
+                <div class="mini-sq" [class.dark]="isDark(col, row)" [class.light]="!isDark(col, row)">
+                  @if (getPieceImage(getBoard()[row][col])) {
+                    <img class="mini-piece-img" [src]="getPieceImage(getBoard()[row][col])" alt="">
+                  }
+                </div>
+              }
+            }
+          </div>
+          <!-- File labels -->
+          <div class="mini-files">
+            @for (f of FILES; track f) {
+              <span>{{ f }}</span>
+            }
+          </div>
+          <!-- Rank labels -->
+          <div class="mini-ranks">
+            @for (r of RANKS; track r) {
+              <span>{{ r }}</span>
+            }
+          </div>
+        </div>
+
+        <!-- Explanation -->
+        <div class="explanation-area">
+          <div class="step-indicator">
+            Step {{ currentStep + 1 }} of {{ selectedOpening.steps.length }}
+          </div>
+          <div class="move-name">{{ selectedOpening.steps[currentStep].move }}</div>
+          <p class="move-explanation">{{ selectedOpening.steps[currentStep].explanation }}</p>
+          <div class="step-nav">
+            <button class="step-btn" (click)="prevStep()" [disabled]="currentStep === 0">← Previous</button>
+            <button class="step-btn" (click)="nextStep()" [disabled]="currentStep === selectedOpening.steps.length - 1">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</div>

@@ -58,6 +58,10 @@ class Game(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(5)]
     )
 
+    time_control = models.IntegerField(default=15)  # minutes
+    white_time_remaining = models.FloatField(default=900)  # seconds
+    black_time_remaining = models.FloatField(default=900)  # seconds
+
     STARTING_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
     current_fen = models.CharField(max_length=100, default=STARTING_FEN)
     status = models.CharField(

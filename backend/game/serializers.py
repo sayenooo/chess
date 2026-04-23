@@ -5,7 +5,7 @@ from .models import Game, Move, Player, MatchmakingQueue
 class PlayerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Player
-        fields = ['rating', 'bio', 'created_at']
+        fields = ['rating', 'bio', 'created_at', 'wins', 'losses', 'draws', 'avatar']
 
 class UserSerializer(serializers.ModelSerializer):
     player_profile = PlayerSerializer(read_only=True)
@@ -43,10 +43,22 @@ class MoveSerializer(serializers.ModelSerializer):
 
 class GameSerializer(serializers.ModelSerializer):
     moves = MoveSerializer(many=True, read_only=True)
+    player_white_name = serializers.SerializerMethodField()
+    player_black_name = serializers.SerializerMethodField()
+    winner_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Game
         fields = '__all__'
+
+    def get_player_white_name(self, obj):
+        return obj.player_white.user.username if obj.player_white else ''
+
+    def get_player_black_name(self, obj):
+        return obj.player_black.user.username if obj.player_black else ''
+
+    def get_winner_name(self, obj):
+        return obj.winner.user.username if obj.winner else ''
 
 class MoveInputSerializer(serializers.Serializer):
     """

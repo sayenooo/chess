@@ -1,0 +1,139 @@
+<div class="shell">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-brand">
+      <img src="/pieces/wK.svg" class="brand-icon-img" alt="K" />
+      <span class="brand-text">KBTU Chess</span>
+    </div>
+    <div class="header-right">
+      <span class="header-username">{{ displayName }}</span>
+      <span class="header-rating">({{ displayRating }})</span>
+      <button class="avatar-btn" (click)="toggleProfile()" id="avatar-toggle">
+        @if (avatarUrl) {
+          <img [src]="avatarUrl" alt="Avatar" class="header-avatar-img">
+        } @else {
+          <span class="avatar-placeholder">{{ displayName[0] | uppercase }}</span>
+        }
+      </button>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      @for (item of navItems; track item.key) {
+        <button
+          class="nav-item"
+          [class.active]="activeSection === item.key"
+          [class.disabled]="isGameLocked && item.key !== 'play'"
+          (click)="setSection(item.key)"
+          [id]="'nav-' + item.key"
+        >
+          <span class="nav-icon">{{ item.icon }}</span>
+          <span class="nav-label">{{ item.label }}</span>
+          @if (isGameLocked && item.key !== 'play') {
+            <span class="lock-icon">🔒</span>
+          }
+        </button>
+      }
+    </nav>
+
+    <!-- Content Area -->
+    <main class="content">
+      @switch (activeSection) {
+        @case ('main') { <app-home [user]="user" /> }
+        @case ('play') { <app-play [user]="user" (gameLock)="isGameLocked = $event" /> }
+        @case ('learn') { <app-learn /> }
+        @case ('news') { <app-news /> }
+      }
+    </main>
+
+    <!-- Lock notification toast -->
+    @if (lockNotification) {
+      <div class="lock-toast">{{ lockNotification }}</div>
+    }
+  </div>
+
+  <!-- Profile Panel Overlay -->
+  @if (profileOpen) {
+    <div class="profile-backdrop" (click)="closeProfile()"></div>
+    <aside class="profile-panel" id="profile-panel">
+      <div class="profile-header">
+        <h2>Profile</h2>
+        <button class="close-btn" (click)="closeProfile()">✕</button>
+      </div>
+
+      @if (user) {
+        <div class="profile-body">
+          <div class="profile-avatar-big" (click)="avatarInput.click()">
+            @if (avatarUrl) {
+              <img [src]="avatarUrl" alt="Avatar" class="avatar-img">
+            } @else {
+              <span>{{ user.username[0] | uppercase }}</span>
+            }
+            <div class="avatar-overlay">
+              @if (uploadingAvatar) {
+                <span class="avatar-spinner"></span>
+              } @else {
+                <span>📷</span>
+              }
+            </div>
+            <input #avatarInput type="file" accept="image/*" (change)="onAvatarChange($event)"
+                   style="display:none" id="avatar-file-input">
+          </div>
+          
+          @if (avatarUrl) {
+            <button class="delete-avatar-btn" (click)="deleteAvatar()">Remove Picture</button>
+          }
+
+          @if (editingUsername) {
+            <div class="edit-username-form">
+              <input type="text" [(ngModel)]="newUsername" class="username-input" placeholder="New Username" (keyup.enter)="saveUsername()">
+              <div class="edit-username-actions">
+                <button class="save-btn" (click)="saveUsername()">Save</button>
+                <button class="cancel-btn" (click)="cancelEditUsername()">Cancel</button>
+              </div>
+            </div>
+          } @else {
+            <div class="profile-name-area">
+              <h3 class="profile-name">{{ user.username }}</h3>
+              <button class="edit-username-btn" (click)="startEditUsername()" title="Edit Username">✎</button>
+            </div>
+          }
+
+          <p class="profile-email">{{ user.email }}</p>
+
+          <div class="profile-stats">
+            <div class="stat">
+              <span class="stat-value">{{ user.player_profile.rating }}</span>
+              <span class="stat-label">Rating</span>
+            </div>
+            <div class="stat win">
+              <span class="stat-value">{{ user.player_profile.wins }}</span>
+              <span class="stat-label">Wins</span>
+            </div>
+            <div class="stat loss">
+              <span class="stat-value">{{ user.player_profile.losses }}</span>
+              <span class="stat-label">Losses</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">{{ user.player_profile.draws }}</span>
+              <span class="stat-label">Draws</span>
+            </div>
+          </div>
+
+          @if (user.player_profile.bio) {
+            <div class="profile-bio">
+              <span class="bio-label">Bio</span>
+              <p>{{ user.player_profile.bio }}</p>
+            </div>
+          }
+
+          <p class="profile-since">Member since {{ user.player_profile.created_at | date:'mediumDate' }}</p>
+        </div>
+      }
+
+      <button class="logout-btn" (click)="logout()" id="logout-btn">Log Out</button>
+    </aside>
+  }
+</div>
