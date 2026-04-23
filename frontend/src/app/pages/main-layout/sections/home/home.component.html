@@ -1,21 +1,21 @@
 <div class="home">
   <div class="welcome-card">
-    <h2>Welcome back, <span class="accent">{{ user?.username || 'Player' }}</span></h2>
+    <h2>Welcome back, <span class="accent">{{ user()?.username || 'Player' }}</span></h2>
     <div class="quick-stats">
       <div class="qs-item">
-        <span class="qs-val">{{ user?.player_profile?.rating || 500 }}</span>
+        <span class="qs-val">{{ user()?.player_profile?.rating || 500 }}</span>
         <span class="qs-label">Rating</span>
       </div>
       <div class="qs-item win">
-        <span class="qs-val">{{ user?.player_profile?.wins || 0 }}</span>
+        <span class="qs-val">{{ user()?.player_profile?.wins || 0 }}</span>
         <span class="qs-label">Wins</span>
       </div>
       <div class="qs-item loss">
-        <span class="qs-val">{{ user?.player_profile?.losses || 0 }}</span>
+        <span class="qs-val">{{ user()?.player_profile?.losses || 0 }}</span>
         <span class="qs-label">Losses</span>
       </div>
       <div class="qs-item">
-        <span class="qs-val">{{ user?.player_profile?.draws || 0 }}</span>
+        <span class="qs-val">{{ user()?.player_profile?.draws || 0 }}</span>
         <span class="qs-label">Draws</span>
       </div>
     </div>
@@ -34,7 +34,9 @@
           <div class="game-type">{{ game.game_type }}</div>
           <div class="game-opponent">vs {{ getOpponent(game) }}</div>
           <div class="game-result" [class]="getResult(game)">{{ getResultText(game) }}</div>
-          <div class="game-status">{{ game.status }}</div>
+          @if (getRatingChange(game)) {
+            <div class="game-rating-delta" [class]="getRatingClass(game)">{{ getRatingChange(game) }}</div>
+          }
           <div class="game-date">{{ game.created_at | date:'short' }}</div>
           <div class="game-arrow">▶</div>
         </div>

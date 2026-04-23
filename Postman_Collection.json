@@ -1,0 +1,945 @@
+{
+  "info": {
+    "name": "Chess Game API",
+    "description": "Полный набор запросов для тестирования шахматного приложения",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. AUTHENTICATION",
+      "item": [
+        {
+          "name": "Register - Create Account",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    pm.environment.set('username', pm.request.body.raw.username || 'testuser');",
+                  "    console.log('✅ Регистрация успешна');",
+                  "} else {",
+                  "    console.log('❌ Ошибка регистрации');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser1\",\n  \"email\": \"test1@example.com\",\n  \"password\": \"TestPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/register/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "register", ""]
+            }
+          }
+        },
+        {
+          "name": "Login - Get Tokens",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.environment.set('access_token', jsonData.access);",
+                  "    pm.environment.set('refresh_token', jsonData.refresh);",
+                  "    console.log('✅ Успешно получены токены');",
+                  "    console.log('Access Token: ' + jsonData.access.substring(0, 20) + '...');",
+                  "} else {",
+                  "    console.log('❌ Ошибка входа');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser1\",\n  \"password\": \"TestPassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/login/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "login", ""]
+            }
+          }
+        },
+        {
+          "name": "Refresh Access Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "token", "refresh", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. PROFILE",
+      "item": [
+        {
+          "name": "Get Current User Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const user = pm.response.json();",
+                  "    pm.environment.set('user_id', user.id);",
+                  "    console.log('✅ Профиль получен');",
+                  "    console.log('Пользователь: ' + user.username);",
+                  "} else {",
+                  "    console.log('❌ Ошибка получения профиля');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profile", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Username",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newusername123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/profile/username/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profile", "username", ""]
+            }
+          }
+        },
+        {
+          "name": "Update Avatar",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": "/path/to/avatar.jpg"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/profile/avatar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profile", "avatar", ""]
+            }
+          }
+        },
+        {
+          "name": "Delete Avatar",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/profile/avatar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "profile", "avatar", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. GAMES - SOLO (vs YOURSELF)",
+      "item": [
+        {
+          "name": "Create SOLO Game",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const game = pm.response.json();",
+                  "    pm.environment.set('solo_game_id', game.id);",
+                  "    pm.environment.set('solo_room_name', game.id.toString());",
+                  "    console.log('✅ SOLO игра создана');",
+                  "    console.log('Game ID: ' + game.id);",
+                  "} else {",
+                  "    console.log('❌ Ошибка создания SOLO игры');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"game_type\": \"SOLO\",\n  \"time_control\": 15\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/games/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""]
+            }
+          }
+        },
+        {
+          "name": "Get SOLO Game Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/{{solo_game_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", "{{solo_game_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Get SOLO Game Moves",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/{{solo_game_id}}/moves/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", "{{solo_game_id}}", "moves", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. GAMES - BOT (vs COMPUTER)",
+      "item": [
+        {
+          "name": "Create BOT Game (White)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const game = pm.response.json();",
+                  "    pm.environment.set('bot_game_id', game.id);",
+                  "    pm.environment.set('bot_room_name', game.id.toString());",
+                  "    console.log('✅ BOT игра создана');",
+                  "    console.log('Game ID: ' + game.id);",
+                  "    console.log('Bot Level: ' + game.bot_level);",
+                  "} else {",
+                  "    console.log('❌ Ошибка создания BOT игры');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"game_type\": \"BOT\",\n  \"bot_level\": 3,\n  \"side\": \"white\",\n  \"time_control\": 15\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/games/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""]
+            }
+          }
+        },
+        {
+          "name": "Create BOT Game (Black)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"game_type\": \"BOT\",\n  \"bot_level\": 2,\n  \"side\": \"black\",\n  \"time_control\": 10\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/games/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""]
+            }
+          }
+        },
+        {
+          "name": "Create BOT Game (Random Side)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"game_type\": \"BOT\",\n  \"bot_level\": 4,\n  \"side\": \"random\",\n  \"time_control\": 15\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/games/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""]
+            }
+          }
+        },
+        {
+          "name": "Get BOT Game Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/{{bot_game_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", "{{bot_game_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Get BOT Game Moves",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/{{bot_game_id}}/moves/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", "{{bot_game_id}}", "moves", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. GAMES - ONLINE (vs PLAYER)",
+      "item": [
+        {
+          "name": "Create ONLINE Game",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"game_type\": \"ONLINE\",\n  \"time_control\": 15\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/games/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""]
+            }
+          }
+        },
+        {
+          "name": "Join Matchmaking Queue",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    const data = pm.response.json();",
+                  "    console.log('Status: ' + data.status);",
+                  "    if (data.game_id) {",
+                  "        pm.environment.set('online_game_id', data.game_id);",
+                  "        pm.environment.set('online_room_name', data.game_id.toString());",
+                  "        console.log('✅ Игра найдена! Game ID: ' + data.game_id);",
+                  "    } else {",
+                  "        console.log('⏳ Ожидание подбора противника...');",
+                  "    }",
+                  "} else {",
+                  "    console.log('❌ Ошибка входа в очередь');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/matchmaking/join/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "matchmaking", "join", ""]
+            }
+          }
+        },
+        {
+          "name": "Leave Matchmaking Queue",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/matchmaking/leave/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "matchmaking", "leave", ""]
+            }
+          }
+        },
+        {
+          "name": "Get ONLINE Game Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/{{online_game_id}}/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", "{{online_game_id}}", ""]
+            }
+          }
+        },
+        {
+          "name": "Get ONLINE Game Moves",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/{{online_game_id}}/moves/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", "{{online_game_id}}", "moves", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. GAMES - FILTERS & LISTING",
+      "item": [
+        {
+          "name": "List All Games",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""]
+            }
+          }
+        },
+        {
+          "name": "List My Games",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/?mine=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""],
+              "query": [
+                {
+                  "key": "mine",
+                  "value": "true"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List In-Progress Games",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/?status=IN_PROGRESS",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "IN_PROGRESS"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List SOLO Games",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/?type=SOLO",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "SOLO"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List BOT Games",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/?type=BOT",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "BOT"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List ONLINE Games",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/?type=ONLINE",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "ONLINE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Combined Filter: My In-Progress SOLO Games",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/games/?mine=true&status=IN_PROGRESS&type=SOLO",
+              "host": ["{{base_url}}"],
+              "path": ["api", "games", ""],
+              "query": [
+                {
+                  "key": "mine",
+                  "value": "true"
+                },
+                {
+                  "key": "status",
+                  "value": "IN_PROGRESS"
+                },
+                {
+                  "key": "type",
+                  "value": "SOLO"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. MOVES",
+      "item": [
+        {
+          "name": "List All Moves",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/moves/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "moves", ""]
+            }
+          }
+        },
+        {
+          "name": "Get Specific Move Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/moves/1/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "moves", "1", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. WEBSOCKET - MOVES (SOLO/BOT/ONLINE)",
+      "item": [
+        {
+          "name": "🔗 SOLO - Move (e2 to e4)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8000/ws/game/{{solo_room_name}}/?type=solo",
+              "protocol": "ws",
+              "host": ["localhost"],
+              "port": ["8000"],
+              "path": ["ws", "game", "{{solo_room_name}}", ""],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "solo"
+                }
+              ]
+            },
+            "description": "WebSocket запрос для хода в SOLO игре\n\nПосле подключения отправьте JSON:\n```json\n{\n  \"action\": \"move\",\n  \"from_square\": \"e2\",\n  \"to_square\": \"e4\"\n}\n```"
+          }
+        },
+        {
+          "name": "🔗 BOT - Move (d2 to d4)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8000/ws/game/{{bot_room_name}}/?type=bot",
+              "protocol": "ws",
+              "host": ["localhost"],
+              "port": ["8000"],
+              "path": ["ws", "game", "{{bot_room_name}}", ""],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "bot"
+                }
+              ]
+            },
+            "description": "WebSocket запрос для хода против бота\n\nПосле подключения отправьте JSON:\n```json\n{\n  \"action\": \"move\",\n  \"from_square\": \"d2\",\n  \"to_square\": \"d4\"\n}\n```"
+          }
+        },
+        {
+          "name": "🔗 ONLINE - Move (c2 to c4)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8000/ws/game/{{online_room_name}}/?type=online",
+              "protocol": "ws",
+              "host": ["localhost"],
+              "port": ["8000"],
+              "path": ["ws", "game", "{{online_room_name}}", ""],
+              "query": [
+                {
+                  "key": "type",
+                  "value": "online"
+                }
+              ]
+            },
+            "description": "WebSocket запрос для хода в онлайн игре\n\nПосле подключения отправьте JSON:\n```json\n{\n  \"action\": \"move\",\n  \"from_square\": \"c2\",\n  \"to_square\": \"c4\"\n}\n```"
+          }
+        },
+        {
+          "name": "🔗 Get Game State (WebSocket)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8000/ws/game/{{solo_room_name}}/",
+              "protocol": "ws",
+              "host": ["localhost"],
+              "port": ["8000"],
+              "path": ["ws", "game", "{{solo_room_name}}", ""]
+            },
+            "description": "Получить текущее состояние игры\n\nПосле подключения отправьте JSON:\n```json\n{\n  \"action\": \"get_state\"\n}\n```"
+          }
+        },
+        {
+          "name": "🔗 Resign from Game (WebSocket)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8000/ws/game/{{solo_room_name}}/",
+              "protocol": "ws",
+              "host": ["localhost"],
+              "port": ["8000"],
+              "path": ["ws", "game", "{{solo_room_name}}", ""]
+            },
+            "description": "Сдаться в игре\n\nПосле подключения отправьте JSON:\n```json\n{\n  \"action\": \"resign\"\n}\n```"
+          }
+        },
+        {
+          "name": "🔗 Offer Draw (WebSocket)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8000/ws/game/{{solo_room_name}}/",
+              "protocol": "ws",
+              "host": ["localhost"],
+              "port": ["8000"],
+              "path": ["ws", "game", "{{solo_room_name}}", ""]
+            },
+            "description": "Предложить ничью\n\nПосле подключения отправьте JSON:\n```json\n{\n  \"action\": \"offer_draw\"\n}\n```"
+          }
+        },
+        {
+          "name": "🔗 Pawn Promotion (e7 to e8, Queen)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "ws://localhost:8000/ws/game/{{solo_room_name}}/",
+              "protocol": "ws",
+              "host": ["localhost"],
+              "port": ["8000"],
+              "path": ["ws", "game", "{{solo_room_name}}", ""]
+            },
+            "description": "Ход с превращением пешки\n\nПосле подключения отправьте JSON:\n```json\n{\n  \"action\": \"move\",\n  \"from_square\": \"e7\",\n  \"to_square\": \"e8\",\n  \"promotion\": \"Queen\"\n}\n```\n\nДоступные варианты:\n- \"Queen\" (по умолчанию)\n- \"Rook\"\n- \"Bishop\"\n- \"Knight\""
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "testuser",
+      "type": "string"
+    },
+    {
+      "key": "solo_game_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "solo_room_name",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bot_game_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bot_room_name",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "online_game_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "online_room_name",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

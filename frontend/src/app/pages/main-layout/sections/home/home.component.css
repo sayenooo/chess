@@ -71,7 +71,7 @@
 
 .game-card {
   display: grid;
-  grid-template-columns: 80px 1fr 90px 120px 100px 24px;
+  grid-template-columns: 80px 1fr 90px auto 100px 24px;
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
@@ -117,10 +117,16 @@
 .game-result.draw { color: var(--draw-color); background: rgba(136, 136, 136, 0.1); }
 .game-result.ongoing { color: var(--accent); background: rgba(201, 168, 76, 0.1); }
 
-.game-status {
-  font-size: 12px;
-  color: var(--text-secondary);
+.game-rating-delta {
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  min-width: 45px;
 }
+
+.game-rating-delta.rating-up { color: #4caf50; }
+.game-rating-delta.rating-down { color: #e53935; }
+.game-rating-delta.rating-neutral { color: #888; }
 
 .game-date {
   font-size: 12px;

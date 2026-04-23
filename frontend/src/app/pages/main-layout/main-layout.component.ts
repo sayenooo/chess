@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, afterNextRender, ChangeDetectorRef } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ApiService, UserProfile } from '../../services/api.service';
@@ -21,7 +21,6 @@ type Section = 'main' | 'play' | 'learn' | 'news';
 export class MainLayoutComponent implements OnInit {
   private api = inject(ApiService);
   private router = inject(Router);
-  private cdr = inject(ChangeDetectorRef);
 
   activeSection: Section = 'main';
   profileOpen = false;
@@ -36,20 +35,13 @@ export class MainLayoutComponent implements OnInit {
     { key: 'news', label: 'News', icon: '♜' },
   ];
 
-  constructor() {
-    afterNextRender(() => {
-      this.loadProfile();
-    });
+  ngOnInit() {
+    this.loadProfile();
   }
-
-  ngOnInit() {}
 
   loadProfile() {
     this.api.getProfile().subscribe({
-      next: (user) => {
-        this.user = user;
-        this.cdr.markForCheck();
-      },
+      next: (user) => (this.user = user),
       error: () => {
         this.api.logout();
         this.router.navigate(['/auth']);
@@ -68,10 +60,18 @@ export class MainLayoutComponent implements OnInit {
 
   toggleProfile() {
     this.profileOpen = !this.profileOpen;
+    // Refresh profile data every time the panel opens
+    if (this.profileOpen) {
+      this.loadProfile();
+    }
   }
 
   closeProfile() {
     this.profileOpen = false;
+  }
+
+  onUserUpdated(updatedUser: UserProfile) {
+    this.user = updatedUser;
   }
 
   logout() {
@@ -146,5 +146,26 @@ export class MainLayoutComponent implements OnInit {
 
   cancelEditUsername() {
     this.editingUsername = false;
+  }
+
+  // --- Bio editing ---
+  editingBio = false;
+  bioText = '';
+
+  startEditBio() {
+    this.editingBio = true;
+    this.bioText = this.user?.player_profile?.bio ?? '';
+  }
+
+  saveBio() {
+    this.editingBio = false;
+    // Bio is stored locally (no API endpoint for bio update yet)
+    if (this.user) {
+      this.user.player_profile.bio = this.bioText;
+    }
+  }
+
+  cancelEditBio() {
+    this.editingBio = false;
   }
 }

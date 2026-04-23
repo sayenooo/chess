@@ -54,6 +54,13 @@
           </button>
         </div>
 
+        <!-- Hidden select synced via [(ngModel)] for game mode -->
+        <select class="hidden-select" [(ngModel)]="gameMode" id="game-mode-select" aria-label="Game Mode">
+          <option value="SOLO">Solo</option>
+          <option value="BOT">vs Bot</option>
+          <option value="ONLINE">Online</option>
+        </select>
+
         @if (gameMode === 'BOT') {
           <div class="option-group">
             <label>Bot Level: {{ botLevel }}</label>
@@ -71,6 +78,12 @@
                 >{{ t }} min</button>
               }
             </div>
+            <!-- Select synced via [(ngModel)] for time control -->
+            <select class="hidden-select" [(ngModel)]="timeControl" id="time-control-select" aria-label="Time Control">
+              @for (t of timeOptions; track t) {
+                <option [ngValue]="t">{{ t }} min</option>
+              }
+            </select>
           </div>
         }
 
@@ -82,6 +95,12 @@
               <button class="side-btn" [class.active]="selectedSide === 'random'" (click)="selectedSide = 'random'">🎲 Random</button>
               <button class="side-btn" [class.active]="selectedSide === 'black'" (click)="selectedSide = 'black'">♚ Black</button>
             </div>
+            <!-- Select synced via [(ngModel)] for side selection -->
+            <select class="hidden-select" [(ngModel)]="selectedSide" id="side-select" aria-label="Side Selection">
+              <option value="white">White</option>
+              <option value="random">Random</option>
+              <option value="black">Black</option>
+            </select>
           </div>
         }
 

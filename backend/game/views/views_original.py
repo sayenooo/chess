@@ -5,8 +5,8 @@ from django.contrib.auth.models import User
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db import transaction
-from .models import Game, Move, MatchmakingQueue
-from .serializers import GameSerializer, MoveSerializer, RegisterSerializer, UserSerializer
+from ..models import Game, Move, MatchmakingQueue
+from ..serializers import GameSerializer, MoveSerializer, RegisterSerializer, UserSerializer
 
 def has_active_game(player):
     return Game.objects.filter(
