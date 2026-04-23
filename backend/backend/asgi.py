@@ -27,4 +27,5 @@ application = ProtocolTypeRouter({
             game.routing.websocket_urlpatterns
         )
     ),
+    
 })
