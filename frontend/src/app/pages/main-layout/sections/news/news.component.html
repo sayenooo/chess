@@ -1,0 +1,13 @@
+<div class="news">
+  <h2 class="page-title">Chess News</h2>
+  <div class="news-list">
+    @for (item of news; track item.title) {
+      <article class="news-card">
+        <div class="news-tag">{{ item.tag }}</div>
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.summary }}</p>
+        <span class="news-date">{{ item.date }}</span>
+      </article>
+    }
+  </div>
+</div>

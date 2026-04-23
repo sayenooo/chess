@@ -1,10 +1,18 @@
 import { Routes } from '@angular/router';
-import { RegisterComponent } from './pages/register.component';
-import { GamePageComponent } from './pages/game-page/game-page.component';
+import { authGuard } from './services/auth.guard';
 
 export const routes: Routes = [
-  { path: '', component: GamePageComponent },
-  { path: 'game', component: GamePageComponent },
-  { path: 'register', component: RegisterComponent },
-
+  {
+    path: 'auth',
+    loadComponent: () => import('./pages/auth/auth.component').then(m => m.AuthComponent)
+  },
+  {
+    path: '',
+    loadComponent: () => import('./pages/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
+    canActivate: [authGuard]
+  },
+  {
+    path: '**',
+    loadComponent: () => import('./pages/not-found/not-found.component').then(m => m.NotFoundComponent)
+  }
 ];

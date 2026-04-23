@@ -1,0 +1,277 @@
+<div class="play">
+  <!-- ========== IDLE STATE ========== -->
+  @if (state === 'idle') {
+    <div class="idle-layout">
+      <div class="board-preview-area">
+        <!-- Active game banner -->
+        @if (activeGame) {
+          <div class="active-game-banner">
+            <div class="agb-info">
+              <span class="agb-icon">⚡</span>
+              <div>
+                <strong>Active Game</strong>
+                <span class="agb-detail">{{ activeGame.game_type }} — vs {{ activeGame.player_white_name || activeGame.player_black_name }}</span>
+              </div>
+            </div>
+            <button class="resume-btn" (click)="resumeGame(activeGame)" id="resume-game-btn">Resume</button>
+          </div>
+        }
+
+        <!-- Static board preview -->
+        <div class="board-container">
+          <div class="rank-labels">
+            @for (r of RANKS; track r) { <span>{{ r }}</span> }
+          </div>
+          <div class="board">
+            @for (r of RANKS; track r) {
+              @for (f of FILES; track f) {
+                <div class="sq" [class.dark]="isDark(f, r)" [class.light]="!isDark(f, r)">
+                  @if (getPieceImage(getPieceAt(f, r))) {
+                    <img class="piece-img" [src]="getPieceImage(getPieceAt(f, r))" alt="">
+                  }
+                </div>
+              }
+            }
+          </div>
+        </div>
+        <div class="file-labels">
+          <div class="file-spacer"></div>
+          @for (f of FILES; track f) { <span>{{ f }}</span> }
+        </div>
+      </div>
+
+      <div class="mode-panel">
+        <h3>Choose Mode</h3>
+        <div class="mode-buttons">
+          <button class="mode-btn" [class.active]="gameMode === 'SOLO'" (click)="gameMode = 'SOLO'">
+            <span class="mode-icon">♟</span>Solo
+          </button>
+          <button class="mode-btn" [class.active]="gameMode === 'BOT'" (click)="gameMode = 'BOT'">
+            <span class="mode-icon">🤖</span>vs Bot
+          </button>
+          <button class="mode-btn" [class.active]="gameMode === 'ONLINE'" (click)="gameMode = 'ONLINE'">
+            <span class="mode-icon">⚔</span>Online
+          </button>
+        </div>
+
+        @if (gameMode === 'BOT') {
+          <div class="option-group">
+            <label>Bot Level: {{ botLevel }}</label>
+            <input type="range" min="1" max="5" [(ngModel)]="botLevel" class="slider">
+          </div>
+
+          <div class="option-group">
+            <label>Time Control</label>
+            <div class="time-buttons">
+              @for (t of timeOptions; track t) {
+                <button
+                  class="time-btn"
+                  [class.active]="timeControl === t"
+                  (click)="timeControl = t"
+                >{{ t }} min</button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (gameMode !== 'ONLINE') {
+          <div class="option-group">
+            <label>Play as</label>
+            <div class="side-buttons">
+              <button class="side-btn" [class.active]="selectedSide === 'white'" (click)="selectedSide = 'white'">♔ White</button>
+              <button class="side-btn" [class.active]="selectedSide === 'random'" (click)="selectedSide = 'random'">🎲 Random</button>
+              <button class="side-btn" [class.active]="selectedSide === 'black'" (click)="selectedSide = 'black'">♚ Black</button>
+            </div>
+          </div>
+        }
+
+        @if (errorMessage) {
+          <div class="error-msg">{{ errorMessage }}</div>
+        }
+
+        <button class="start-btn" (click)="startGame()" id="start-game-btn">Start Game</button>
+      </div>
+    </div>
+  }
+
+  <!-- ========== MATCHMAKING STATE ========== -->
+  @if (state === 'matchmaking') {
+    <div class="overlay-screen">
+      <div class="matchmaking-card">
+        <div class="search-animation">
+          <span class="search-piece">♞</span>
+          <span class="search-piece delay">♘</span>
+        </div>
+        <h2>Searching for opponent...</h2>
+        <p class="search-sub">Looking for a player near your rating</p>
+        <button class="cancel-btn" (click)="cancelMatchmaking()">Cancel</button>
+      </div>
+    </div>
+  }
+
+  <!-- ========== OPPONENT FOUND STATE ========== -->
+  @if (state === 'opponent_found') {
+    <div class="overlay-screen">
+      <div class="found-card">
+        <h2>Opponent Found!</h2>
+        <div class="found-vs">
+          <div class="found-player">
+            <div class="found-avatar">{{ playerName[0] | uppercase }}</div>
+            <span class="found-name">{{ playerName }}</span>
+            <span class="found-rating">({{ playerRating }})</span>
+          </div>
+          <span class="vs-text">VS</span>
+          <div class="found-player">
+            <div class="found-avatar opp">{{ opponentName[0] | uppercase }}</div>
+            <span class="found-name">{{ opponentName }}</span>
+            <span class="found-rating">({{ opponentRating }})</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ========== PLAYING STATE ========== -->
+  @if (state === 'playing' || state === 'game_over') {
+    <div class="game-layout">
+      <div class="game-board-area">
+        <!-- Opponent bar with timer -->
+        <div class="player-bar">
+          <div class="bar-avatar opp">{{ opponentName[0] | uppercase }}</div>
+          <span class="bar-name">{{ opponentName }}</span>
+          <div class="timer-display" [class.low-time]="isFlipped ? isWhiteLowTime : isBlackLowTime" [class.active-timer]="(isFlipped ? 'white' : 'black') === currentTurn">
+            {{ isFlipped ? whiteTimeFormatted : blackTimeFormatted }}
+          </div>
+        </div>
+
+        <!-- Board -->
+        <div class="board-container">
+          <div class="rank-labels">
+            @for (r of displayRanks; track r) { <span>{{ r }}</span> }
+          </div>
+          <div class="board">
+            @for (r of displayRanks; track r) {
+              @for (f of displayFiles; track f) {
+                <button
+                  class="sq"
+                  [class.dark]="isDark(f, r)"
+                  [class.light]="!isDark(f, r)"
+                  [class.selected]="isSelected(f, r)"
+                  (click)="onSquareClick(f, r)"
+                >
+                  @if (getPieceImage(getPieceAt(f, r))) {
+                    <img class="piece-img" [src]="getPieceImage(getPieceAt(f, r))" alt="">
+                  }
+                </button>
+              }
+            }
+          </div>
+        </div>
+        <div class="file-labels">
+          <div class="file-spacer"></div>
+          @for (f of displayFiles; track f) { <span>{{ f }}</span> }
+        </div>
+
+        <!-- Player bar with timer -->
+        <div class="player-bar self">
+          <div class="bar-avatar self-av">{{ playerName[0] | uppercase }}</div>
+          <span class="bar-name">{{ playerName }}</span>
+          <div class="timer-display" [class.low-time]="isFlipped ? isBlackLowTime : isWhiteLowTime" [class.active-timer]="(isFlipped ? 'black' : 'white') === currentTurn">
+            {{ isFlipped ? blackTimeFormatted : whiteTimeFormatted }}
+          </div>
+        </div>
+      </div>
+
+      <!-- Side panel -->
+      <div class="game-side-panel">
+        <div class="turn-info">
+          <span class="turn-label">Turn</span>
+          <span class="turn-color" [class.white-turn]="currentTurn === 'white'" [class.black-turn]="currentTurn === 'black'">
+            {{ currentTurn === 'white' ? '♔ White' : '♚ Black' }}
+          </span>
+        </div>
+
+        @if (errorMessage) {
+          <div class="game-error">{{ errorMessage }}</div>
+        }
+
+        <!-- Draw offer received popup -->
+        @if (drawOfferReceived) {
+          <div class="draw-offer-popup">
+            <span class="draw-offer-text">🤝 Opponent offers a draw</span>
+            <div class="draw-offer-actions">
+              <button class="draw-accept-btn" (click)="acceptDraw()">Accept</button>
+              <button class="draw-decline-btn" (click)="declineDraw()">Decline</button>
+            </div>
+          </div>
+        }
+
+        @if (drawOfferSent) {
+          <div class="draw-sent-indicator">Draw offered — waiting for response...</div>
+        }
+
+        <!-- Notation panel (2-column) -->
+        <div class="moves-panel">
+          <h4>Moves</h4>
+          <div class="notation-table">
+            @if (moveHistory.length === 0) {
+              <span class="moves-empty">No moves yet</span>
+            }
+            @for (pair of moveHistory; track pair.number) {
+              <div class="notation-row">
+                <span class="notation-num">{{ pair.number }}.</span>
+                <span class="notation-white">{{ pair.white }}</span>
+                <span class="notation-black">{{ pair.black }}</span>
+              </div>
+            }
+          </div>
+        </div>
+
+        <div class="game-actions">
+          @if (gameMode === 'ONLINE' && state === 'playing' && !drawOfferSent) {
+            <button class="draw-btn" (click)="offerDraw()" id="draw-btn">🤝 Draw</button>
+          }
+          <button class="resign-btn" (click)="resign()" id="resign-btn">🏳 Resign</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ========== GAME OVER OVERLAY ========== -->
+  @if (state === 'game_over' && gameOverData) {
+    <div class="game-over-backdrop">
+      <div class="game-over-card">
+        <div class="go-player" [class]="opponentResultClass">
+          <div class="go-avatar opp">{{ opponentName[0] | uppercase }}</div>
+          <div class="go-info">
+            <span class="go-name">{{ opponentName }}</span>
+          </div>
+        </div>
+
+        <div class="go-vs">VS</div>
+
+        <div class="go-player" [class]="playerResultClass">
+          <div class="go-avatar self-av">{{ playerName[0] | uppercase }}</div>
+          <div class="go-info">
+            <span class="go-name">{{ playerName }}</span>
+            @if (showRatingChange) {
+              <span class="rating-delta" [class]="ratingChangeClass">{{ ratingChangeText }}</span>
+            }
+          </div>
+        </div>
+
+        <div class="go-result" [class]="resultTextClass">
+          <h3>{{ resultText }}</h3>
+          @if (resultSubtext) {
+            <p>{{ resultSubtext }}</p>
+          }
+        </div>
+
+        <div class="go-actions">
+          <button class="go-btn exit-btn" (click)="exitGame()">Exit</button>
+          <button class="go-btn new-btn" (click)="newGameFromOverlay()">New Game</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
