@@ -89,17 +89,16 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
         })
 
     async def disconnect(self, close_code):
-        if not self.is_solo:
+        if hasattr(self, 'room_group_name'):
             await self.channel_layer.group_discard(
                 self.room_group_name,
                 self.channel_name,
             )
+            logger.info('Player disconnected from room %s', self.room_group_name)
 
         # Clean up board when everyone disconnects (solo always cleans up)
-        if self.is_solo:
+        if getattr(self, 'game_type', None) == 'SOLO' and hasattr(self, 'room_name'):
             self.active_boards.pop(self.room_name, None)
-
-        logger.info('Player disconnected from room %s', self.room_group_name)
 
     async def receive_json(self, content: dict):
         """
@@ -124,9 +123,11 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
                 await self._handle_new_game()
             case 'get_state':
                 game = await self.get_game()
+                if not game:
+                    return
                 await self.send_json({
                     'type': 'game_state',
-                    'game_type': self.game_type,
+                    'game_type': getattr(self, 'game_type', 'UNKNOWN'),
                     'payload': {
                         'fen': game.current_fen,
                         'current_turn': self.board.current_turn,
@@ -144,6 +145,8 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
     
     @database_sync_to_async
     def get_game(self):
+        if not hasattr(self, 'room_name'):
+            return None
         try:
             # Looking for the game by ID and get users
             return Game.objects.select_related(
@@ -156,6 +159,9 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
     async def _handle_move(self, content: dict, is_bot=False):
         # Game status check
         game = await self.get_game()
+        if not game:
+            return
+            
         if game.status in [Game.Status.CHECKMATE, Game.Status.STALEMATE, Game.Status.DRAW, Game.Status.RESIGNED]:
             if not is_bot:
                 await self.send_json({
@@ -294,7 +300,9 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
 
     async def _handle_resign(self):
         game = await self.get_game()
-        
+        if not game:
+            return
+            
         if game.status != Game.Status.IN_PROGRESS and game.status != Game.Status.WAITING:
             return
 
@@ -346,13 +354,13 @@ class ChessConsumer(AsyncJsonWebsocketConsumer):
             },
         }
 
-        if self.game_type == 'SOLO':
+        if getattr(self, 'game_type', None) == 'SOLO':
             await self.send_json(payload)
         else:
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
-                    'type': 'game_message',
+                    'type': 'game_new_game',
                     'payload': payload,
                 },
             )
